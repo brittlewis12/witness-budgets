@@ -12,9 +12,40 @@
 
 ---
 
+## Status and Scope
+
+This document presents a research framework and evaluation design for operational transparency in AI mathematical reasoning. Specific empirical validations, implementations, and case studies are described to illustrate what adequate testing would require, not as commitments to particular timelines or deliverables. The framework is designed to be testable and falsifiable; validation would require the empirical work outlined in Part VII.
+
+---
+
+## What's New in This Paper
+
+Not a rehash of "constructive math exists." We introduce a discipline + tooling package that makes operational transparency measurable and enforceable in practice.
+
+- **Witness Budgets (C0–C5) with inference & CI** — A compositional effect system that tracks non-constructive power per theorem/definition and enforces thresholds in CI (novel as a systematic practice in FM/mathlib-style workflows).
+  - *Prior:* ad-hoc norms; extraction flags; no library-wide budget telemetry.
+
+- **Quantitative type contracts** — API signatures that require witnesses + rates/bounds, turning "existence" into executable content by construction.
+  - *Prior:* Coq/Lean can extract programs, but bounds/rates are rarely enforced at the type level.
+
+- **C1 invariance discipline** — A concrete consumer contract (@[invariant_only] + linter) that lets teams use existence results safely without representative-picking, and downgrade budgets when invariance is proved.
+  - *Prior:* Informal guidance; no automated check for "don't rely on which witness."
+
+- **Tooling to operationalize the discipline** — Budget inference pass, invariance linter, badges, and CI policy (MVP spec in §6) so projects can adopt this without rewriting math.
+  - *Prior:* Extraction/proof-mining exist; no integrated pipeline tying budgets, invariance, and CI together.
+
+- **Empirical program** — Falsifiable metrics (coverage, automation success, performance, hygiene, portability) on targeted case studies to test whether lower budgets actually improve automation and composition.
+  - *Prior:* Proof mining results; limited end-to-end benchmarks on automation/composability.
+
+**Non-goals (for clarity):** We are not replacing classical math, and we do not claim constructivism solves alignment broadly. This is a focused framework for AI that must produce algorithms with certified bounds.
+
+**Building on prior work:** This framework builds on extensive work in program extraction, realizability, proof mining, and reverse mathematics. Our novelty is systematic integration + enforcement + empirical evaluation at library scale, making constructive discipline measurable and actionable in modern proof assistant workflows.
+
+---
+
 ## Executive Summary
 
-For AI systems doing mathematical reasoning to be verifiable and alignable (per Christiano's transparent oversight framework), they must operate on foundations that provide **executable content (witnesses, bounds, and rates)** - not just correctness proofs, but concrete algorithms with certified properties.
+For AI that produces algorithms from mathematics, we need operational transparency: not only that each proof step is formally verifiable (classical and constructive both qualify), but that the result exposes **executable content (witnesses, bounds, and rates)** for composition and audit - concrete algorithms with certified properties, not just correctness proofs.
 
 This document argues that:
 1. **Non-constructive classical mathematics** creates "oracle dependencies" that provide logical verification but resist operational extraction
@@ -22,7 +53,9 @@ This document argues that:
 3. **Constructive foundations with quantitative content** provide both verification and operational extractability
 4. **This is testable**: Instrument proof assistants, formalize applied mathematics constructively, measure automation gains
 
-**Critical distinction:** Classical proofs are verifiable (Lean/Coq check them successfully). Constructive proofs are verifiable AND operational (they yield executable algorithms and bounds). For oversight and automation, we need both properties.
+**Core hypothesis:** We hypothesize that lower witness budgets improve automation; §7 pre-registers an evaluation framework to test this claim empirically.
+
+**Critical distinction:** Classical proofs are verifiable—Lean and Coq check them successfully. Constructive proofs are verifiable AND operational—they yield executable algorithms and bounds. For oversight and automation, we need both properties.
 
 **Scope:** This addresses AI systems producing *executable algorithms with quantitative bounds* from mathematical reasoning - a growing subset of AI capabilities including automated mathematics, certified software, and scientific computing. It does NOT address general AI alignment (value learning, deception, robustness), non-mathematical AI capabilities (vision, language, robotics), or pure theorem proving where execution isn't required.
 
@@ -31,15 +64,15 @@ This document argues that:
 ## Who This Is For / What We Need From You
 
 **AI Safety Researchers:**
-- Consider: When formal verification is needed, prefer C0–C2 formulations (executable witnesses improve automation)
-- Try: Budget-tracking your formal benchmarks, measure automation differences
+- Consider: When formal verification is needed, prefer C0–C2 formulations—executable witnesses improve automation
+- Try: Budget-track your formal benchmarks and measure automation differences
 
 **Formal Methods Community:**
 - Try: Run the budget linter on a library subfolder, report violations and refactoring opportunities
 - Contribute: Help design the instrumentation and CI integration
 
 **Constructive Mathematics Community:**
-- Help: Design quantitative API signatures (explicit moduli, rates, bounds) for applied results
+- Help: Design quantitative API signatures with explicit moduli, rates, and bounds for applied results
 - Formalize: Target C0–C2 versions of key applied theorems with extractable content
 
 ---
@@ -56,13 +89,16 @@ Most mathematics isn't purely constructive or purely classical - it falls on a s
 | **C1** | Existence-Only (invariants-only use; ∥∃x.P∥ in HoTT) | Propositional truncation | Logical existence; consumers must use invariant properties only | "A solution exists" where downstream uses only solution-independent facts |
 | **C2** | Countable Choice | ACω, DC (sequential/countable choices) | Often extractable, works for most analysis | Cauchy subsequences; separable Hilbert spaces; completeness arguments |
 | **C3** | Classical Logic | LEM (excluded middle) only | Verifiable but often non-executable | Many classical proofs that avoid choice; decidability by cases |
-| **C4** | Choice Fragments | Ultrafilter Lemma ≡ Boolean Prime Ideal | Domain-specific oracles | Stone-Čech compactification; Tychonoff for compact Hausdorff spaces* |
-| **C5** | Full Choice | AC ≡ Zorn's Lemma ≡ Well-Ordering Principle | Global arbitrary selection; minimal witness content | Arbitrary vector space bases; Hahn-Banach (non-separable, full generality); Tychonoff for arbitrary uncountable products*; well-ordering reals |
+| **C4** | Choice Fragments | Ultrafilter Lemma ≡ Boolean Prime Ideal (ULBPI) | Domain-specific oracles | Stone-Čech compactification; Tychonoff for compact Hausdorff spaces |
+| **C5** | Full Choice | AC ≡ Zorn's Lemma ≡ Well-Ordering Principle | Global arbitrary selection; minimal witness content | Arbitrary vector space bases; Hahn-Banach (non-separable, full generality); Tychonoff for arbitrary uncountable products; well-ordering reals |
 
 **Key technical notes:**
 - Zorn's Lemma is equivalent to full AC (over ZF), not a weaker fragment - it belongs in C5
 - Ultrafilter Lemma and Boolean Prime Ideal theorem are equivalent (over ZF) - combined in C4
-- *Tychonoff's theorem has multiple formulations: arbitrary products of compact spaces requires full AC (C5); products of compact **Hausdorff** spaces requires only Ultrafilter Lemma (C4); countable products can be proven constructively or with DC (C2)
+- **Tychonoff's theorem has three distinct formulations:**
+  1. **C5 (Full AC):** Arbitrary products of compact spaces (uncountable, non-Hausdorff)
+  2. **C4 (ULBPI):** Products of compact **Hausdorff** spaces (uncountable products)
+  3. **C2 (DC):** Countable products (constructive or uses only dependent choice)
 
 ### 1.2 Budget Calculus: Compositional Tracking
 
@@ -74,8 +110,8 @@ budget(f ∘ g) = max(budget(f), budget(g))
 **Monotonicity:**
 If theorem T uses lemma L with budget C2, then T inherits budget ≥ C2
 
-**Refinement:**
-If a consumer proves naturality/invariance, can downgrade C1 → C0 (witness-free consumption becomes witnessful reasoning)
+**Refinement (C1 downgrading):**
+C1→C0 downgrading applies only to *consumer* definitions marked `@[invariant_only]` with an explicit `Quot.lift`/naturality proof showing representative-independence. The producer's budget remains C1; downgrading is local to the consumer and non-compositional unless all downstream uses satisfy the invariance contract.
 
 **Effect system formalization:**
 Treat non-constructive steps as effects in a type system:
@@ -133,6 +169,8 @@ PLUS: Convergence bound
 
 This is **operational content** - the difference between knowing a solution exists and being able to compute it with certified bounds.
 
+**Practical note:** In most applied settings, the Lipschitz constant L (or a bound on it) is either known analytically, estimated numerically, or derived from problem structure—making the C0 variant directly usable without additional theoretical overhead.
+
 **Example 2: Hahn-Banach Extensions**
 
 **The choice:** Given functional f on subspace, infinitely many norm-preserving extensions to whole space exist. Classical proof: use AC to assert "pick one."
@@ -183,7 +221,7 @@ This isn't just aesthetic squeamishness - it's about **what mathematical claims 
 
 **Key difference:** Circles are limits of constructive processes with measurable convergence rates. AC asserts existence without any process, even idealized.
 
-This connects to computational complexity: For circles, you can ask "how many sides to get within ε?" For AC-dependent objects, there's no analogous question - no algorithm means no complexity.
+This connects to computational complexity: For circles, you can ask "how many sides to get within ε?" For AC-dependent objects, there's no analogous question - no algorithm means no computational complexity analysis is possible.
 
 ### 2.3 The "It Doesn't Matter Which" Insight
 
@@ -210,7 +248,9 @@ This turns "arbitrary selection" into "reasoning about structure that makes repr
 
 ---
 
-## Part III: The AI Safety Connection
+## Part III: From Oversight to Automation - Logical vs Operational Transparency
+
+**Scope note:** This section concerns automation and transparency in formal proof systems and mathematical reasoning, not general AI alignment. The witness budget framework addresses a specific subset of AI capabilities: systems producing executable artifacts from mathematical specifications.
 
 ### 3.1 Christiano's Transparent Oversight Framework
 
@@ -229,33 +269,28 @@ This turns "arbitrary selection" into "reasoning about structure that makes repr
 - Debate (adversarial verification of reasoning steps)
 - Recursive reward modeling (verify stepwise, not just endpoints)
 
-### 3.2 The Structural Connection
+### 3.2 From Oversight to Operational Transparency
 
-**How this maps to mathematical foundations:**
+Christiano's framework motivates a broader requirement: **oversight needs two kinds of transparency.**
 
-```
-Christiano's Framework:
-├─ Black-box oracle → can't inspect internal mechanism → oversight difficult
-├─ Transparent reasoning → can verify each step → oversight possible
-└─ Need: Stepwise verifiable and executable artifacts
+**Logical transparency:** Every inference is checkable - each proof step can be formally verified.
+- Classical proofs: ✓ (Lean/Coq verify them successfully)
+- Constructive proofs: ✓ (also formally verifiable)
 
-Mathematical Foundations:
-├─ Non-constructive proof (AC) → no witness/algorithm → can't execute/extract
-├─ Constructive proof → explicit witness → can execute and verify
-└─ Need: Both logical correctness AND operational content
-```
+**Operational transparency:** Artifacts are executable and composable - witnesses, algorithms, bounds can be extracted and used.
+- Classical proofs (C3-C5): ✗ (usually no extractable content)
+- Constructive proofs (C0-C2): ✓ (witnesses + rates extractable)
 
-**The parallel:** Both frameworks share a principle - **to use or trust a result, you need access to its internal mechanism**, not just confirmation that a correct answer exists somewhere.
+**Witness budgets measure operational transparency.** Lower budgets → more witnesses/rates → better extraction, composition, and search structure.
 
-**Critical nuance:** These are related but distinct concerns:
-- **Christiano's problem:** Capability oversight - can humans verify superhuman reasoning?
-- **Constructive math:** Operational content - can we extract algorithms and bounds?
+**The connection to AI automation:**
 
-**Where they converge:** For AI systems doing **algorithmic mathematics** (certified software, numerical methods, automated science), we need:
-1. **Verification:** Each proof step is checkable (classical and constructive both provide this)
-2. **Operational content:** Witnesses, algorithms, bounds extractable (only constructive provides this)
+In Christiano-style oversight, decomposition only becomes actionable when subclaims produce artifacts we can run or compose. For AI systems producing **algorithmic mathematics** (certified software, numerical methods, automated science), we need both forms of transparency:
 
-**For transparent oversight of AI producing executable mathematical artifacts, constructive foundations provide both requirements.**
+1. **Logical transparency:** Each proof step is checkable (both classical and constructive provide this)
+2. **Operational transparency:** Witnesses, algorithms, bounds extractable (typically requires constructive formulations)
+
+**This isn't about replacing classical proofs generally** - it's about recognizing that for domains where AI must produce executable artifacts, operational transparency is an engineering requirement, not a philosophical preference.
 
 ### 3.3 Verification vs Operationalization: The Key Distinction
 
@@ -269,7 +304,7 @@ Operational content means extractable:
 - Bounds (explicit rates, error terms, moduli)
 - Quantitative data (not just asymptotic behavior)
 
-**The two-dimensional space:**
+**The two-dimensional space (both axes required for deployable math-to-code):**
 
 | | Verifiable | Operational |
 |---|---|---|
@@ -277,18 +312,38 @@ Operational content means extractable:
 | **Constructive (C0–C2)** | Yes | Yes |
 
 **For AI safety and automation:**
-- **Verification alone:** Confirms correctness but doesn't enable execution, composition, or algorithmic search
-- **Operational content:** Enables extraction, testing, composition into pipelines, and provides algorithmic "landmarks" for proof search
+- **Verification alone** confirms correctness but doesn't enable execution, composition, or algorithmic search
+- **Operational content** enables extraction, testing, composition into pipelines, and provides algorithmic "landmarks" for proof search
 
 **One-liner:** "We track correctness with verification and usability with operational content."
 
 ### 3.4 Why This Matters for AI Mathematics
 
-**Current state:**
-- Recent systems using Lean for mathematical reasoning (including Olympiad-level problem solving)
-- Success requires producing verifiable artifacts
-- Proof search benefits from executable witnesses (can test candidates)
-- Composition requires outputs to feed forward
+**Hypothesis H1 (Automation):** We hypothesize that lower witness budgets (C0–C2) improve automated proof success and efficiency relative to classically equivalent statements.
+
+This is not obvious—classical proofs can be shorter and sometimes easier for current models trained on predominantly classical corpora. A rigorous evaluation framework is outlined in §7.1 to measure this effect directly. For this approach to be credible, results would need to be reported regardless of whether they confirm or refute the hypothesis.
+
+**Mechanistic rationale:**
+
+1. **Execution-prunable witnesses (CEGIS-style pruning).** When existentials live in Type (C0–C2), candidate witnesses can be run and falsified locally. This adds a cheap, ground-truth rejection test at many nodes of the search tree, reducing effective branching. In dependent type theory, `∃ x, P x` at constructive levels becomes a Σ-type whose inhabitant `(x, p)` can be partially validated by computation (normalization + running x) before finishing the logical part p. This supplies a local verifier for many search nodes; in proof-search terms it's a low-cost refutation oracle that reduces branching.
+
+2. **Sequential structure as search constraints.** DC/ACω yield program shape (Σ/Π structure, recursion over ℕ). This constrains the synthesis space (fewer admissible terms) and narrows tactic choices.
+
+3. **Denser learning signal.** Constructive proofs include witness programs and quantitative terms (rates, moduli), yielding richer supervision for gradient updates than purely logical endpoints (more tokens with semantic alignment).
+
+4. **Composable artifacts.** Witnesses/bounds create typed interfaces between lemmas, enabling pipeline assembly and reuse (fewer dead-ends, more reusable subproofs). Conversely, Prop-only existentials provide no executable handle, so search proceeds in a higher-entropy space relying on tactic heuristics alone.
+
+**Predictions:**
+- **P1 (pass@k↑):** Higher pass@k on C0–C2 formulations of the same result
+- **P2 (steps↓):** Fewer backtracks / lower tactic steps per solved goal
+- **P3 (exec-prune↑):** Better ablations when "execute-to-prune" is enabled
+- **P4 (composition↑):** Higher success on long chains (witnesses feed forward)
+
+**Why we expect this to matter:**
+- AI systems using proof assistants for mathematical reasoning must produce verifiable artifacts
+- Proof search could benefit from executable witnesses (enabling candidate testing)
+- Compositional reasoning requires outputs that can feed forward into subsequent steps
+- Lower budgets provide more computational "handles" for search algorithms
 
 **The bottleneck with high-budget proofs:**
 
@@ -313,31 +368,7 @@ Lower witness budgets provide more structure:
 - C1–C2: Sequential construction guides search strategy
 - C3–C5: Fewer algorithmic landmarks, must search logical space abstractly
 
-### 3.5 Three Verification Channels
-
-The landscape isn't binary - there are three approaches with different properties:
-
-**1. Constructive Witness (C0–C2)**
-- Provides: Executable algorithm/witness + quantitative bounds
-- Properties: Verifiable AND operational
-- Best for: Automation, composition, downstream computation
-- Example: Banach fixed-point with convergence rate
-
-**2. Classical Proof (C3–C5)**
-- Provides: Logical correctness
-- Properties: Verifiable but NOT operational
-- Best for: Pure existence results where witnesses unnecessary
-- Example: Excluded middle arguments, non-constructive fixed-points
-
-**3. Interactive/PCP (Probabilistic Checkable Proofs)**
-- Provides: Succinct certificates verifiable via randomness
-- Properties: Efficiently verifiable, usually not operational
-- Best for: Complexity-theoretic results, very large proofs
-- Example: Cryptographic zero-knowledge proofs
-
-**For AI automation and composability, constructive witnesses are optimal.** Other channels serve different purposes but don't provide the operational content needed for algorithmic extraction and pipeline composition.
-
-### 3.6 How This Unifies Three Communities
+### 3.5 How This Unifies Three Communities
 
 This synthesis provides missing motivation across three traditionally siloed fields:
 
@@ -403,21 +434,25 @@ Proof: By exhaustive search over all x, decide which holds
 - Classical: "Iterates converge to fixed point"
 - Extracted: N(ε) = ⌈ln(d(x₁,x₀) / ((1-L)ε)) / ln(1/L)⌉ iterations for tolerance ε
 - From: Contraction constant L, observable initial iterate distance d(x₁,x₀)
+- Reference: Kohlenbach (2008), *Applied Proof Theory*, Chapter 10
 
 **Ergodic theory:**
 - Classical: "Time averages converge to space averages"
 - Extracted: Metastability rates (effective convergence moduli)
 - Applications: Computational ergodic theory
+- Reference: Avigad, Gerhardy, & Towsner (2010), "Local stability of ergodic averages"
 
 **Nonlinear analysis:**
 - Classical: "Iterative scheme converges"
 - Extracted: Explicit rates for Krasnoselski-Mann iterations
 - Applications: Optimization algorithms
+- Reference: Kohlenbach & Leuștean (2009), "Asymptotically nonexpansive mappings in uniformly convex hyperbolic spaces"
 
 **Optimization:**
 - Classical: "Gradient descent converges"
 - Extracted: Convergence rates depending on Lipschitz constants
 - Applications: Certified machine learning
+- Reference: Kohlenbach (2008), Chapter 17; proof mining yields explicit moduli of convergence
 
 **The bridge:** Proof mining connects classical applied mathematics to executable, verifiable algorithms with certified bounds. This is exactly what AI systems need for transparent algorithmic reasoning.
 
@@ -450,6 +485,17 @@ theorem exists_fixed_point
 
 **Type-level enforcement:** If the API demands `(witness, rate)`, proofs must provide both. Can't just assert "converges" without explicit rate function.
 
+**Coq parallel (generality beyond Lean):**
+```coq
+Theorem exists_fixed_point
+  (f : X -> X)
+  (L : R) (hL : L < 1)
+  (contract : forall x y, dist (f x) (f y) <= L * dist x y) :
+  { x : X & f x = x } * (R -> nat).  (* witness + rate *)
+```
+
+The same discipline applies across proof assistants: quantitative content as type-level contract, not optional documentation.
+
 ---
 
 ## Part V: Applied Mathematics Case Studies
@@ -471,12 +517,12 @@ theorem exists_fixed_point
 - Some optimization existence theorems (classical proofs exist, but algorithms often computable)
 
 **Tier 3: Appears to need AC, actually works at C0–C2**
-- Most undergraduate analysis (completeness, sequential compactness)
-- Differential equations (existence/uniqueness for nice cases)
-- Probability theory (much standard work on separable spaces uses ACω/DC; some advanced results need stronger choice)
+- Much of standard undergraduate analysis when reformulated with explicit moduli (completeness, sequential compactness)
+- Differential equations (existence/uniqueness for nice cases with constructive inputs)
+- Probability theory (on separable spaces, many standard constructions use ACω/DC; some advanced results need stronger choice)
 - Most numerical mathematics (inherently finite-dimensional or countable)
 
-**The measurement challenge:** We'll formalize theorems in targeted domains (optimization, separable analysis) and measure what percentage achieve C0–C2 with explicit moduli.
+**The measurement challenge:** This hypothesis could be tested by formalizing representative theorems in targeted domains (optimization, separable analysis) and measuring what percentage achieve C0–C2 with explicit moduli.
 
 ### 5.2 Case Study 1: Hahn-Banach Theorem
 
@@ -624,12 +670,7 @@ For uncountable products, showing compactness requires choosing accumulation poi
 **Alternative 1: Finite approximation (C0)**
 - Discretize commodity space (finitely many goods or finite approximation of continuum)
 - Discretize agent types (finite or countable approximation)
-- Use computational fixed-point algorithms:
-  - Scarf's algorithm (simplicial methods)
-  - Lemke-Howson for bimatrix games
-  - Continuation methods
-- Get approximate equilibria with explicit error bounds
-- Budget: C0 (fully algorithmic)
+- Use computational fixed-point algorithms (Scarf, Lemke-Howson, continuation methods) yielding approximate equilibria with explicit error bounds ⇒ C0 (fully algorithmic)
 - Works for: Numerical simulation, practical market design
 - Trade-off: Approximation errors, computational complexity
 
@@ -715,12 +756,35 @@ def Budget.join (b1 b2 : Budget) : Budget :=
   ⟨b1.effects ∪ b2.effects⟩
 ```
 
-**Inference heuristic:**
+**Inference approach (design specification):**
+
+The budget tracker walks the compiled environment, computing `effects(c)` for each constant by examining its `usedConstants` closure post-elaboration. Direct markers include `@[noncomputable]`, `Classical.*` namespace lemmas, and curated axiom lists for Zorn, ultrafilter lemmas, etc. Implicit classical reasoning is detected via typeclass-synthesized `Classical.propDecidable` instances and tactic-inserted classical lemmas visible in the compiled term. Composition is handled via transitive closure: if `f` calls `g`, `effects(f)` includes `effects(g)`. The inference is conservative—may over-approximate—and can be refined via explicit `@[witness_budget]` annotations.
+
+**Implementation status:** This describes the intended design. Actual implementation would need to handle edge cases such as classical reasoning hidden in imported definitions, universe polymorphism interactions, and tactic-generated proof terms. The algorithm would require validation and refinement during a proof-of-concept phase. A complete empirical study would include published implementation details. An MVP implementation as an open-source Lean 4 plugin would be a natural first proof-of-concept.
+
+**Technical details (effect semantics):**
+- Effects compose via union (max in the C0–C5 lattice): `effects(f ∘ g) = effects(f) ∪ effects(g)`
+- Higher-order: `effects(λx.b)` includes effects of `b` and any captured terms; `effects(f a) = effects(f) ∪ effects(a)`
+- Transitive dependencies: budget computed over `usedConstants` closure (post-elaboration)
+- Model-theoretic principles: Łoś's theorem, ultraproducts, compactness, and saturation are curated as C4/C5 (ULBPI/AC) via explicit axiom lists
+- Budgets are cached per module; imported modules contribute their cached budgets to local inference
+
+**Future work:** A full formalization of the effect system semantics requires addressing:
+- Soundness/completeness lemmas relating syntactic budget inference to semantic extractability
+- Precise handling of impredicative Prop vs Type distinctions in dependent type theory
+- Effect polymorphism and universe polymorphism interactions
+- Tactic-generated proof terms (where classical reasoning may be introduced implicitly)
+- Budget inference for metaprogramming and elaboration-time computation
+
+The pragmatic inference algorithm described here is conservative (may over-approximate budgets) and refinable via explicit `@[witness_budget]` annotations. It provides actionable telemetry for library-scale adoption while these theoretical questions are resolved.
+
+**Inference heuristic (summary):**
 Scanner walks compiled proof term, flags uses of:
 - `classical`, `Classical.choice`, `Classical.some`, `Classical.em`
 - `noncomputable` (usually indicates classical reasoning)
 - `Quot.out` without `Quot.lift` (representative picking)
 - Known choice lemmas from mathlib (Zorn, Ultrafilter, etc.)
+- Implicit `Classical.propDecidable` via typeclass synthesis
 
 **CI integration:**
 ```
@@ -742,6 +806,10 @@ directory_budgets = {
 **Problem:** Code uses `choose`, `some`, `Classical.some` to pick representatives, but doesn't prove choice is irrelevant.
 
 **Solution:** Enforce invariance discipline
+
+**Invariance enforcement:**
+
+The linter flags raw representative-picking (`Classical.some`, `Quot.out`, `choose`) unless the consumer factors through `Quot.lift`/`Quotient.lift` with a supplied congruence proof, or is marked `@[invariant_only]` with an explicit invariance lemma. This makes the "doesn't matter which" principle mechanically checkable: if the choice truly doesn't matter, the naturality proof should exist.
 
 ```lean
 /-- Mark consumers using only invariant properties -/
@@ -808,6 +876,73 @@ Dependencies: 12 theorems (all ≤ C0)
 
 **This makes witness budgets visible and trackable**, not hidden in proof internals.
 
+### 6.6 Practical Adoption Path
+
+**How does this land in mathlib without a fork?**
+
+The framework is designed for incremental adoption without breaking changes to existing formalization efforts:
+
+**Dual-rail strategy:**
+- Keep classical lemmas in place (no breaking changes to existing mathlib)
+- Add budgeted constructive variants with quantitative signatures
+- Both versions can coexist; users choose based on application needs
+- Classical → constructive via added hypotheses (rates/moduli as inputs)
+- Constructive → classical by erasing witnesses (always possible, loses operational content)
+- **Maintenance overhead mitigation:** Link theorems via `@[witness_of classical_lemma]` attribute; share statements via wrappers/instances; prioritize "constructive islands" (optimization, separable analysis) rather than library-wide duplication
+
+**Budget overlays:**
+- Per-directory thresholds configured in `witness_budget.toml`
+- PRs can exceed thresholds with `budget:justify` label + explanation
+- CI blocks increases without justification, but allows local overrides
+- Gradual tightening as constructive alternatives become available
+
+**Constructive islands:**
+- Start in well-scoped domains: separable analysis, optimization, numerical methods
+- Publish badges & dashboards showing coverage and trends
+- Create "extractable" subcollections that guarantee operational content
+- Build proof-of-concept applications (certified solvers, verified algorithms)
+
+**Gradualism and interoperability:**
+- Allow `@[witness_budget]` annotations on individual theorems (opt-in)
+- Local lints can be enabled per-file or per-directory
+- Strict CI enforcement can be phased in after community buy-in
+- Classical dependencies don't block constructive downstream use (budget inheritance tracks accurately)
+
+**Community incentives:**
+- Badge systems reward low-budget contributions
+- Extraction showcases demonstrate practical value
+- Automation benchmarks provide empirical validation
+- Grant/funding opportunities for constructive formalization work
+
+**Key principle:** The framework should make constructive discipline *visible* and *rewarded* without making classical formalization *impossible* or *penalized*. Both approaches serve different purposes; the tooling helps users make informed choices.
+
+---
+
+**Adoption Costs & Risks:**
+
+Introducing this framework at scale involves real engineering costs and risks:
+
+1. **Dual-rail maintenance burden:** Maintaining both classical and constructive variants increases library surface area and contributor workload
+2. **Invariance-proof engineering:** Proving that choice "doesn't matter" (for C1 downgrading) requires substantial additional proof effort
+3. **Contributor retraining:** Community members must learn constructive proof techniques, explicit modulus construction, and quantitative API design
+4. **CI friction:** Budget enforcement may block PRs or create friction in contribution workflows
+5. **Scope boundary risks:** Without clear delineation of "constructive islands," the dual-rail approach may expand beyond tractable boundaries
+
+**Mitigations:**
+- Link paired theorems via `@[witness_of]` attributes for coordinated maintenance
+- Target high-value "constructive islands" (optimization, separable analysis) rather than library-wide duplication
+- Opt-in per-directory enforcement with explicit justification mechanisms for budget overruns
+- Badge incentives and extraction showcases to demonstrate value
+- Publish PR-friction metrics alongside coverage data to track adoption costs empirically
+
+**Success thresholds:** For this approach to be viable, we should observe:
+- ≥70% C0–C2 coverage in targeted domains
+- <15% PR rejection rate due to budget violations (after initial adoption period)
+- Measurable automation improvements (pass@k, tactic steps) justifying the dual-rail overhead
+- Extraction success rate >80% for C0–C2 formalized theorems
+
+If these thresholds aren't met, honest documentation of adoption costs vs. benefits would inform whether the framework should be recommended for broader use.
+
 ---
 
 ## Part VII: Research Program and Validation
@@ -822,36 +957,61 @@ Dependencies: 12 theorems (all ≤ C0)
 **Automation Hypothesis:**
 AI theorem provers achieve measurably higher success rates on C0–C2 statements vs classical formulations of the same result.
 
-**Measurement:**
-- Proof search time (faster with witnesses?)
-- Success rate (higher with executable content?)
-- Verification failures (lower with constructive?)
-- Composability (easier to chain C0–C2 results?)
+**Evaluation Design:**
+
+*Dataset:* 30–50 theorem pairs with matched statements: (A) classical form (C3–C5), (B) constructive/quantitative form (C0–C2). Domains: Banach FP with rates, sequential compactness vs. general compactness, basic optimization lemmas with moduli.
+
+*Systems:* A fixed Lean auto-tactic baseline and an LLM-driven prover (same model/settings across conditions). Optional flag: `execute_to_prune` that runs candidate witnesses where available.
+
+*Metrics (with precise validation thresholds):*
+- **(i) pass@k:** **Threshold:** ≥15% relative improvement in pass@10 for C0–C2 vs classical formulations—e.g., 50% → 57.5%
+- **(ii) median tactic steps:** **Threshold:** ≥10% reduction in median tactic steps for successful proofs
+- **(iii) wall-clock time:** **Threshold:** ≥10% reduction in median proof-search time for successful attempts
+- **(iv) proof length:** **Secondary metric**—may increase due to explicit witnesses; not a validation criterion
+- **(v) composition success:** **Threshold:** ≥20% relative improvement on 2–3-step pipelines where witnesses feed forward—e.g., 40% → 48%
+- **(vi) extraction success:** **Threshold:** ≥80% of C0–C2 proofs yield compilable, executable code; extracted algorithms run without errors on test inputs
+
+**Validation outcome:** H1 is supported if **at least 3 of 5** primary metrics (i, ii, iii, v, vi) meet their thresholds on the evaluation dataset. If fewer than 3 meet thresholds, report as "insufficient evidence for automation benefits" and analyze failure modes.
+
+*Ablations:*
+- A1: Disable `execute_to_prune` on C0–C2 to isolate the execution benefit
+- A2: Strip explicit moduli/rates from signatures to test the "quantitative types" effect
+- A3: Force decidability via `Classical.propDecidable` to see impact of implicit classicalization
+
+*Confound acknowledgment:* Current LLMs are trained on existing mathematical corpora, which are overwhelmingly classical. The evaluation design should track whether constructive proofs are simply less familiar to models trained on classical corpora, vs structurally easier to search. This helps disentangle intrinsic benefits from distribution shift effects.
+
+**Methodological requirement:** A credible evaluation requires publishing negative results. If H1 were to fail, analysis of where constructive structure didn't translate into search gains would be essential.
 
 **Performance Hypothesis:**
 Extracted algorithms from constructive proofs are competitive with hand-coded implementations.
 
-**Measurement:**
-- Wall-clock time (target: within 2× of hand-coded)
-- Accuracy (comparable on standard benchmarks)
-- Memory usage (reasonable overhead)
-- Compilation time (tractable)
+**Measurement (with precise thresholds):**
+- **Wall-clock time:** ≤10× slowdown vs hand-coded baseline (stretch goal: ≤3×)
+- **Accuracy:** Bit-identical or within 1 ULP (unit in the last place) on floating-point outputs
+- **Memory usage:** ≤5× overhead vs hand-coded (absolute: <1GB for benchmark problems)
+- **Compilation time:** <60 seconds for extracted code compilation (per theorem)
+
+**Validation outcome:** Performance hypothesis is supported if extracted implementations meet wall-clock (≤10×) and accuracy thresholds on ≥80% of test cases. Report detailed profiling for outliers to identify optimization opportunities.
 
 **Hygiene Hypothesis:**
 Measurable decline in representative-picking violations after linter adoption.
 
-**Measurement:**
-- Violations per 1000 lines of code
-- Budget distributions shift leftward (toward C0–C2)
-- Refactoring patterns (how are violations fixed?)
+**Measurement (with precise thresholds):**
+- **Violations per 1000 LOC:** ≥30% reduction within 6 months of linter deployment
+- **Budget distribution shift:** ≥10 percentage point increase in C0–C2 coverage—e.g., 40% → 50%
+- **Refactoring patterns:** Document whether fixes use `Quot.lift`, add invariance proofs, or provide explicit moduli
+
+**Validation outcome:** Hygiene hypothesis is supported if violation rate decreases by ≥30% and budget distribution shifts toward C0–C2 by ≥10pp in instrumented modules.
 
 **Portability Hypothesis:**
 Proofs compile in both Coq and Lean without budget escalation.
 
-**Measurement:**
-- Cross-system formalization success rate
-- Budget preservation across systems
-- Demonstrates genuine constructiveness, not system artifacts
+**Measurement (with precise thresholds):**
+- **Cross-system formalization success:** ≥70% of case study theorems successfully formalized in both Lean and Coq
+- **Budget preservation:** Budget classifications agree within ±1 level in ≥80% of cross-formalized theorems
+- **No system artifacts:** If budgets diverge, root cause analysis documents whether difference is due to library dependencies, axiom availability, or genuine semantic differences
+
+**Validation outcome:** Portability hypothesis is supported if cross-system success rate ≥70% and budget agreement ≥80%.
 
 ### 7.2 Threats to Validity
 
@@ -881,13 +1041,31 @@ The following risks could undermine our hypotheses and require mitigation:
 - **Mitigation:** Parallel formalization in both systems for case studies; explicit axiom tracking; standardized budget inference rules
 - **Detection:** Cross-system formalization attempts; budget comparison reports; proof term analysis
 
-**Addressing these proactively:** Case studies will explicitly track and report on each threat, documenting mitigation effectiveness and any hypothesis adjustments needed.
+**Design requirement:** Case studies should explicitly track and report on each threat, documenting mitigation effectiveness and any needed hypothesis adjustments.
 
 ### 7.3 Two High-Signal Case Studies
 
+**Selection criteria:** Initial case studies should target theorems that are:
+1. **High-impact:** Widely used in applications (numerical methods, optimization, PDE solving)
+2. **Budget-reducible:** Classical formulations exist, but C0–C2 versions are achievable with explicit moduli
+3. **Mathlib-present:** Already formalized classically in mathlib, enabling direct comparison
+4. **Extraction-testable:** Yield executable algorithms suitable for performance benchmarking
+
+**Target mathlib modules for initial instrumentation:**
+- `Mathlib.Topology.MetricSpace.Contracting` (Banach fixed-point theorem)
+- `Mathlib.Analysis.NormedSpace.BanachSteinhaus` (Separable analysis)
+- `Mathlib.Topology.Compactness.Compact` (Sequential compactness in metric spaces)
+- `Mathlib.Analysis.Calculus.MeanValue` (Mean value theorem with explicit bounds)
+
+---
+
 **Study 1: Banach Fixed-Point Theorem**
 
-**Deliverables:**
+**Mathlib target:** `Mathlib.Topology.MetricSpace.Contracting.efixedPoint_of_contracting_nonneg`
+
+**Proposed scope:**
+
+Complete validation would include:
 1. Constructive formalization (C0) with explicit convergence rate
 2. Extracted solver implementation in Lean/Coq
 3. Certification: Rate formula N(ε) = ⌈ln(d(x₁,x₀) / ((1-L)ε)) / ln(1/L)⌉
@@ -898,11 +1076,15 @@ The following risks could undermine our hypotheses and require mitigation:
    - Extracted code performance vs hand-written solver
    - Usability in downstream optimization applications
 
-**Application:** Use in certified numerical optimization, compare against classical proofs that give converges eventually without rates.
+**Application context:** Certified numerical optimization, compared against classical proofs that give convergence eventually without rates.
 
 **Study 2: Arzelà-Ascoli in Separable Metric Spaces**
 
-**Deliverables:**
+**Mathlib target:** `Mathlib.Topology.UniformSpace.Ascoli` (restrict to separable metric case)
+
+**Proposed scope:**
+
+Complete validation would include:
 1. Constructive proof avoiding ultrafilters
 2. Method: Total boundedness + equicontinuity + dependent choice (C2)
 3. Explicit subsequence constructor with modulus
@@ -912,11 +1094,13 @@ The following risks could undermine our hypotheses and require mitigation:
    - Budget assignments and dependencies
    - Practical utility for PDE compactness arguments
 
-**Application:** Compactness arguments in numerical PDE solving, certified subsequence extraction for function spaces.
+**Application context:** Compactness arguments in numerical PDE solving, certified subsequence extraction for function spaces.
 
 **Optional Study 3: Compact Products via Locales**
 
-**Deliverables:**
+**Proposed scope:**
+
+Complete validation would include:
 1. Countable products of compact metric spaces
 2. Gluing method avoiding ultrafilters (C0–C2)
 3. Demonstration of practical utility for function spaces
@@ -1001,40 +1185,21 @@ For AI automation and certified algorithms, we need both. This isn't philosophic
 **Objection:** Classical proofs ARE verifiable - Lean/Coq verify them fine. You keep implying non-constructive proofs can't be verified, but that's wrong.
 
 **Response:**
-You're absolutely right, and we've been careful to distinguish:
+This concern is well-founded, and we maintain this distinction carefully throughout. See §3.3 for the full explanation, but in summary:
 
-**Verification:** Can we formally check the proof is correct?
-- Classical proofs: Yes
-- Constructive proofs: Yes
+**Verification** (logical correctness): Both classical and constructive proofs are verifiable
+**Operationalization** (extractable content): Typically only constructive proofs provide this
 
-**Operationalization:** Can we extract executable content?
-- Classical proofs: Usually No
-- Constructive proofs: Yes
-
-**The claim:** For AI safety and automation in algorithmic domains, we need **both verification AND operational content**. Constructive foundations provide both. Classical foundations provide verification but often not operationalization.
-
-This is about extractability and executability, not verifiability per se.
+For AI safety and automation in algorithmic domains, we need **both** properties. This framework tracks operational content (via witness budgets) while taking verification as a baseline requirement for all formalized mathematics.
 
 ### 8.4 "What about interactive/PCP proofs? You're ignoring other verification approaches."
 
 **Objection:** Probabilistically Checkable Proofs and interactive proof systems provide efficient verification without requiring witnesses. Your framework ignores an entire approach to verification.
 
 **Response:**
-Not ignoring - acknowledging as **complementary**:
+Not ignoring - acknowledging as **complementary**. See Appendix D for detailed comparison of verification channels (constructive witnesses, classical proofs, PCPs).
 
-**Three verification channels:**
-1. Constructive witness: Execute and verify
-2. Classical proof: Verify logically but don't execute
-3. Interactive/PCP: Verify succinctly via probabilistic checking
-
-**Different properties:**
-- Constructive: Best for automation, composition, extraction
-- Classical: Best for pure existence where execution unnecessary
-- PCP: Best for complexity theory, very large proofs, cryptographic applications
-
-**Our focus:** For AI producing **algorithmic mathematics** (certified software, numerical methods), constructive witnesses are optimal because they provide operational content needed for execution and composition.
-
-PCP/interactive proofs serve different purposes (efficiency, succinctness) but don't provide the extractable algorithms we need for computational applications.
+**In brief:** Different approaches serve different purposes. For AI producing **algorithmic mathematics** (certified software, numerical methods), constructive witnesses are optimal because they provide the operational content needed for execution and composition. PCP/interactive proofs excel at efficient verification and succinctness but don't provide extractable algorithms for computational applications.
 
 ### 8.5 "Lean's mathlib is classical - this is impractical"
 
@@ -1049,7 +1214,9 @@ We're NOT proposing to replace mathlib. We're proposing:
 4. **Tooling:** Build instrumentation that makes constructive discipline enforceable
 5. **Empirical validation:** Measure if benefits (automation, extraction) justify costs
 
-**The bootstrapping challenge section** explicitly addresses this: we're not claiming "everyone should rewrite everything," we're claiming "let's test if constructive applied math provides measurable benefits, and if so, make it easier for others to adopt."
+**Acknowledging the overhead:** Yes, dual-rail increases maintenance surface area. This could be mitigated by linking paired theorems via attributes so they're maintained together, sharing implementations via wrappers, and targeting "constructive islands" like optimization and separable analysis where most value concentrates—not library-wide duplication. If benefits don't justify costs in practice, honest documentation of this trade-off would be essential.
+
+**The bootstrapping challenge section (§7.4)** explicitly addresses this: we're not claiming "everyone should rewrite everything," we're claiming "let's test if constructive applied math provides measurable benefits, and if so, make it easier for others to adopt."
 
 ### 8.6 "Constructive algorithms might be inefficient"
 
@@ -1066,9 +1233,38 @@ Valid concern. This is exactly why **proof mining is essential**, not optional:
 - Not just "algorithm" but "algorithm + complexity bound"
 - Not just "approximate" but "approximate with explicit error function"
 
-**Empirical test:** Case studies will measure performance. Target: within 2× wall-clock time of hand-coded implementations. If we can't achieve this, we'll report negative results and identify what went wrong.
+**Empirical test:** Case studies should measure performance. Reasonable target: within an order of magnitude of hand-coded implementations, with constant-factor optimization as an explicit workstream. Credible evaluation requires reporting performance characteristics and identifying bottlenecks.
 
-We're not claiming "constructive = efficient" automatically. We're claiming "constructive + quantitative bounds = practical algorithms" is achievable for important cases.
+We're not claiming "constructive = efficient" automatically. We're claiming "constructive + quantitative bounds = practical algorithms with certifiable correctness" is achievable for important cases, and the performance trade-offs are empirically measurable.
+
+### 8.7 "Why not classical proof + manual algorithm implementation?"
+
+**Objection:** Many applied mathematicians already do this successfully: prove existence classically, then separately implement an algorithm by hand. Why is automatic extraction better than careful human translation from proof to code?
+
+**Response:**
+Extraction provides guarantees that manual translation cannot:
+
+**Spec-to-code conformance:**
+- Extracted code is *provably* correct with respect to the theorem statement
+- Manual implementations can introduce bugs during translation
+- Gap between "paper proof" and "running code" is a known source of errors in scientific computing
+
+**Compositional reuse:**
+- Extracted algorithms automatically compose via typed interfaces (witness budgets)
+- Manual implementations require hand-written glue code and compatibility checks
+- Budget tracking ensures composed pipelines maintain extraction guarantees
+
+**Maintainability:**
+- When theorem statement changes, extraction stays synchronized automatically
+- Manual implementations require separate updates and re-verification
+- Refactorings propagate correctly through extraction pipeline
+
+**Certified bounds:**
+- Quantitative content (rates, moduli, complexity) is mechanically verified
+- Manual claims about performance often lack formal justification
+- Extraction makes "algorithm with certified bounds" a single artifact
+
+**However:** For mature, performance-critical numerical codes, hand-optimized implementations may outperform direct extraction. The value proposition is strongest for: (a) rapid prototyping with correctness guarantees, (b) compositional pipelines where interface conformance matters, and (c) domains where bugs are costly—safety-critical systems and verified science. The performance gap is an empirical question requiring measurement.
 
 ---
 
@@ -1146,14 +1342,14 @@ We're not claiming "constructive = efficient" automatically. We're claiming "con
 
 **Philosophical:**
 - Constructive mathematics isn't just aesthetic preference - it's about operational content
-- Non-constructive existence is structurally analogous to black-box oracles in oversight
+- Non-constructive existence steps lack operational handles for extraction and composition
 - "It doesn't matter which choice" signals we should work with invariants, not representatives
 - Circles vs choice functions: different kinds of idealization (process limits vs bare assertion)
 
 **Technical:**
 - Witness budget (C0–C5) makes oracle dependence measurable and compositional
 - Verification ≠ operationalization - need to distinguish and provide both
-- Three verification channels (constructive, classical, PCP) serve different purposes
+- Three verification channels (constructive, classical, PCP) serve different purposes (see Appendix D for details)
 - Proof mining extracts quantitative content, bridging classical proofs to algorithms
 
 **Empirical (testable):**
@@ -1216,16 +1412,16 @@ We're not claiming "constructive = efficient" automatically. We're claiming "con
 
 ### 10.4 The Path Forward
 
-**This framework is ready to build.**
+**This framework is ready to prototype and validate.** The instrumentation would itself be a research contribution; §6 specifies the core mechanisms. A complete empirical study would publish implementation details alongside the design validation.
 
-The conceptual work is done. The witness budget scale is coherent. The connections are validated by multiple reviewers. The scope is honest. The metrics are falsifiable.
+The conceptual framework is established. The witness budget scale is coherent. The connections are validated by multiple reviewers. The scope is honest. The metrics are falsifiable.
 
-**What remains is engineering and empirical validation:**
-1. Build the instrumentation (budget tracking, linters, CI integration)
-2. Formalize the case studies (Banach, Arzelà-Ascoli with explicit rates)
-3. Extract and benchmark algorithms (measure performance, compare to hand-coded)
-4. Measure automation differences (AI proof search on C0–C2 vs classical)
-5. Report results (positive or negative - either way we learn)
+**A complete validation program would include:**
+1. Building the instrumentation (budget tracking, linters, CI integration)
+2. Formalizing the case studies (Banach, Arzelà-Ascoli with explicit rates)
+3. Extracting and benchmarking algorithms (measuring performance, comparing to hand-coded)
+4. Measuring automation differences (AI proof search on C0–C2 vs classical)
+5. Reporting results (positive or negative - either way we learn)
 
 **The opportunity:**
 Be among the first to explicitly connect transparent oversight frameworks to constructive mathematical foundations, demonstrate measurable benefits empirically, and provide tooling that makes operational content practical and trackable.
@@ -1233,7 +1429,145 @@ Be among the first to explicitly connect transparent oversight frameworks to con
 **The question:**
 Not whether witness budgets are a useful concept (they are), but whether the automation and extraction benefits are large enough to justify the engineering investment in constructive formalization.
 
-**The answer requires empirical work.** Let's measure it.
+**The answer requires empirical work.** Implementation of a budget tracker in Lean 4 and formalization of Banach fixed-point with explicit convergence rates would provide concrete proof-of-concept validation. These are tractable first steps for anyone motivated to test the framework.
+
+---
+
+## Part XI: Related Work
+
+This work sits at the intersection of program extraction, Curry-Howard/realizability, proof mining, computable analysis, reverse mathematics, program synthesis, formal libraries, and AI for theorem proving. Prior efforts establish the foundations and many powerful techniques; what's missing is a library-scale discipline with metrics and CI that ties constructive content to automation and extraction outcomes. We position our contribution as integration + enforcement + empirical validation. For a summary of our contributions vs prior work, see the "What's New in This Paper" section at the document opening.
+
+### 11.1 Landscape Overview
+
+| **Area** | **Representative work** | **Gap we address** | **What we add** |
+|----------|------------------------|-------------------|-----------------|
+| **Program extraction** | Coq extraction; Agda compilation; Lean codegen; Nuprl | No quantitative contracts; no budget telemetry; no CI; little data on automation | Budgets + type-level bounds/rates + CI enforcement + automation metrics |
+| **Curry-Howard / Realizability** | CH isomorphism; (modified) realizability; Dialectica | Foundations, not library-scale discipline | Operational discipline (budgets, invariance, contracts) at scale |
+| **Proof mining** | Kohlenbach; functional interpretations | Manual, post hoc; bounds can be huge; no AI automation link | Upfront quantitative APIs + budget diffs + automation eval |
+| **Computable analysis / Weihrauch** | Weihrauch reducibility; TTE | Classifies difficulty, not usage in libraries; orthogonal focus | Oracle-usage telemetry in proof assistants; potential cross-analysis |
+| **Reverse mathematics** | Simpson's subsystems | Provability strength, not engineering guidance | Budgets to guide refactoring and CI policies |
+| **Program synthesis / CEGIS** | Sketch; SyGuS; exec-guided search | Synthesis, not formal proof libraries; no axiom tracking | Execute-to-prune witnesses in proof search; budget-aware eval |
+| **Formal math libraries** | mathlib, MathComp, Coq stdlib, Isabelle/HOL | No budget tracking; constructive vs classical is binary | Graded budgets, badges, and dual-rail adoption path |
+| **AI for theorem proving** | Neural provers/tactics | No distinction by budget; no extraction guarantees | Budget-aware benchmarks; compositional interfaces via witnesses |
+
+### 11.2 Program Extraction from Proofs
+
+**Existing work:**
+- Coq's extraction mechanism (Letouzey, 2002) extracts OCaml/Haskell from Set/Type; Prop erases during extraction
+- Lean's code generation compiles executable code but only from computable definitions (non-`noncomputable` terms)
+- Agda's direct compilation treats code as proof; Nuprl's computational content semantics (Constable et al., 1986)
+
+**Gap our framework addresses:**
+- Existing extraction yields code but rarely enforces explicit bounds/rates at the type level; no systematic budget tracking to measure which axioms block extraction; no CI integration or automation metrics
+
+**Our contribution:**
+- Systematic budget tracking + quantitative type signatures requiring witnesses and rates + CI enforcement + empirical automation evaluation (see §6, §7)
+
+### 11.3 Curry-Howard Correspondence and Realizability
+
+**Existing work:**
+- Curry-Howard isomorphism (proofs as programs, propositions as types); Kleene realizability and modified realizability (Kreisel, 1959); Dialectica interpretation (Gödel, 1958) for functional interpretation of proofs
+
+**Relationship to our work:**
+- These provide the *foundational* connection between proofs and algorithms; witness budgets operationalize this at the *library engineering* level; we're not introducing new semantics, but engineering discipline for existing foundations
+
+**Our contribution:**
+- Practical tooling and metrics that make Curry-Howard principles trackable at scale in modern proof assistant libraries (see §6.2–6.5)
+
+### 11.4 Proof Mining (Kohlenbach's Program)
+
+**Existing work:**
+- Kohlenbach (2008): *Applied Proof Theory* — systematic extraction of quantitative bounds from classical analysis using Dialectica and bounded functional interpretation
+- Applications: Fixed-point theory, ergodic theory (Avigad et al., 2010), nonlinear analysis (Kohlenbach & Leuștean, 2009), optimization
+
+**Gap our framework addresses:**
+- Proof mining is expert-driven manual analysis yielding post-hoc bounds (which can be impractically large); we seek *automated* budget tracking and advocate *stating* quantitative APIs upfront
+- No integration with AI automation or compositional pipelines
+
+**Our contribution:**
+- Combining proof mining insights with type-level quantitative contracts enforced at formalization time; budget telemetry before/after mining; automation metrics (see §4.2–4.3, §7.1)
+
+### 11.5 Computable Analysis and Weihrauch Complexity
+
+**Existing work:**
+- Computable analysis (Weihrauch, 2000; Pour-El & Richards, 1989): which analysis objects/functions are computable?
+- Weihrauch reducibility measures relative computational difficulty; Type-2 effectivity for continuous functions
+
+**Relationship to our work:**
+- Computable analysis classifies *what's computable*; witness budgets measure *oracle usage* (orthogonal but complementary axes)
+- Weihrauch degrees are finer-grained than C0–C5 (they distinguish *within* computable problems)
+
+**Our contribution:**
+- Practical instrumentation for tracking oracle usage in proof assistants, targeted at AI automation and library engineering; potential future work to correlate budgets with Weihrauch degrees (see §11.9)
+
+### 11.6 Reverse Mathematics (Simpson's Program)
+
+**Existing work:**
+- Simpson (2009): *Subsystems of Second Order Arithmetic* — classifying theorems by minimal axiom strength needed to prove them
+- "Big Five" subsystems: RCA₀, WKL₀, ACA₀, ATR₀, Π¹₁-CA₀; measures *logical strength*
+
+**Relationship to our work:**
+- Reverse mathematics: "What axioms are *necessary*?" (proof-theoretic classification)
+- Witness budgets: "What oracle effects are *used*?" (engineering telemetry with operational consequences)
+
+**Our contribution:**
+- Engineering framework that makes axiom tracking actionable for CI/CD and AI automation; budgets guide refactoring, not just classification (see §6.2, §6.6)
+
+### 11.7 Program Synthesis and CEGIS
+
+**Existing work:**
+- Counterexample-Guided Inductive Synthesis (Solar-Lezama, 2008): synthesize programs by iterative refinement
+- SyGuS (Alur et al., 2013): syntax-guided synthesis; execution-guided search uses concrete evaluation to prune search space
+
+**Relationship to our work:**
+- Our "execution-prunable witnesses" mechanism (§3.4, Hypothesis H1) is conceptually similar to CEGIS: when existentials live in Type (C0), candidate witnesses can be executed and falsified
+
+**Our contribution:**
+- Bringing execution-guided search principles into theorem proving with budget tracking; measured via witness budgets; evaluation framework for automation benefits (see §7.1)
+
+### 11.8 Formalization Efforts and Proof Assistant Libraries
+
+**Existing work:**
+- Mathlib (Lean): 150k+ theorems, predominantly classical
+- Mathematical Components (Coq): Constructive by design, focus on finite group theory
+- Coq standard library, Isabelle/HOL: mix of classical and constructive
+
+**Gap addressed:**
+- No systematic budget tracking across any major library; classical vs constructive is binary choice, not graded measurement; no CI enforcement of constructive discipline; limited empirical data on automation differences
+
+**Our contribution:**
+- Instrumentation to measure and track budgets in existing libraries; dual-rail adoption strategy with explicit maintenance mitigation (§6.6); empirical evaluation of automation benefits (§7.1)
+
+### 11.9 AI for Theorem Proving
+
+**Existing work:**
+- Neural theorem provers and LLM-driven systems; proof search with language models; tactic prediction and auto-formalization
+
+**Gap addressed:**
+- Current systems don't distinguish budget levels; no systematic evaluation of constructive vs classical for automation; generated proofs may use unnecessary oracle steps; no extraction guarantees for AI-produced theorems
+
+**Our contribution:**
+- Framework for evaluating whether constructive formulations improve AI proof search (Hypothesis H1, §7.1); budget tracking for AI-generated proofs; compositional interfaces via witnesses
+
+### 11.10 Summary: What's Novel Here
+
+Each component exists in some form. Our contribution is **systematic integration + enforcement + empirical validation:**
+
+**Integration:**
+- Curry-Howard + proof mining + quantitative types + CI engineering + AI automation metrics
+- Bridging three communities (AI safety, formal methods, constructive math) with shared framework
+
+**Enforcement:**
+- Witness budgets as *measured, tracked, CI-enforced* discipline (not just philosophy)
+- Invariance linter making "doesn't matter which" mechanically checkable
+- Quantitative type contracts forcing explicit bounds
+
+**Empirical validation:**
+- Falsifiable hypotheses about automation benefits (H1)
+- Performance benchmarks for extracted code
+- Coverage metrics for C0–C2 reformulation feasibility
+
+In short, we don't propose new semantics; we operationalize existing ones. The novelty is a systematic practice—witness budgets, quantitative contracts, invariance discipline—backed by tooling and benchmarks so the community can measure and improve operational transparency at scale.
 
 ---
 
@@ -1334,6 +1668,10 @@ For proof term Γ ⊢ t : A, define:
 - Bertot, Y. & Castéran, P. (2004). *Interactive Theorem Proving and Program Development: Coq'Art*
 - Nederpelt, R. & Geuvers, H. (2014). *Type Theory and Formal Proof*
 
+**Program Extraction:**
+- Letouzey, P. (2002). "A New Extraction for Coq" (Coq extraction mechanism)
+- Constable, R. et al. (1986). *Implementing Mathematics with the Nuprl Proof Development System*
+
 **Reverse Mathematics:**
 - Simpson, S. G. (2009). *Subsystems of Second Order Arithmetic*
 
@@ -1354,6 +1692,16 @@ For proof term Γ ⊢ t : A, define:
 **Computable Analysis:**
 - Weihrauch, K. (2000). "Computable Analysis"
 - Pour-El, M. B. & Richards, J. I. (1989). "Computability in Analysis and Physics"
+
+**AI for Theorem Proving:**
+- Polu, S. & Sutskever, I. (2020). "Generative Language Modeling for Automated Theorem Proving" (GPT-f)
+- Lample, G. et al. (2022). "HyperTree Proof Search for Neural Theorem Proving"
+- Jiang, A. et al. (2023). "Draft, Sketch, and Prove: Guiding Formal Theorem Provers with Informal Proofs"
+- Thakur, A. et al. (2024). "Language Agent Tree Search Unifies Reasoning, Acting, and Planning in Language Models" (LATS, applicable to Lean)
+
+**Program Synthesis and CEGIS:**
+- Solar-Lezama, A. (2008). "Program Synthesis by Sketching" (foundational CEGIS work)
+- Alur, R. et al. (2013). "Syntax-Guided Synthesis" (SyGuS framework)
 
 ### B.3 Online Communities and Resources
 
@@ -1407,13 +1755,13 @@ For questions, collaboration, or contributions to this framework:
 
 **Dependent Choice (DC):** Principle allowing sequential choices from non-empty sets (weaker than full AC)
 
-**Effect System:** Type system tracking computational effects (here: oracle/classical effects in proofs)
+**Effect System:** Type system tracking computational effects—here, oracle and classical effects in proofs
 
-**Executable Content:** Operational artifacts extractable from proofs: witnesses (concrete objects), algorithms (procedures), bounds (explicit rates, error terms, moduli), and quantitative data beyond asymptotic behavior
+**Executable Content:** Operational artifacts extractable from proofs—witnesses (concrete objects), algorithms (procedures), bounds (explicit rates, error terms, moduli), and quantitative data beyond asymptotic behavior
 
 **Homotopy Type Theory (HoTT):** Foundation treating equality as paths, types as spaces, with univalence axiom
 
-**Law of Excluded Middle (LEM):** Principle that P ∨ ¬P holds for all propositions (rejected in intuitionistic logic)
+**Law of Excluded Middle (LEM):** Principle that P ∨ ¬P holds for all propositions—rejected in intuitionistic logic
 
 **Operational Content:** Extractable algorithmic content: witnesses, bounds, rates, moduli from proofs
 
@@ -1429,12 +1777,44 @@ For questions, collaboration, or contributions to this framework:
 
 **Witness:** Explicit object or algorithm satisfying an existence claim (not just proof that one exists)
 
-**Zorn's Lemma:** In a partially ordered set where every chain has upper bound, there exists maximal element (equivalent to AC over ZF)
+**Zorn's Lemma:** In a partially ordered set where every chain has upper bound, there exists maximal element—equivalent to AC over ZF
 
 ---
 
-*Document Version: 2.0*
-*Last Updated: 2025*
+## Appendix D: Alternative Verification Channels
+
+While this document focuses on constructive witnesses for operational content, there are other verification approaches worth understanding:
+
+**1. Constructive Witness (C0–C2) — Focus of this framework**
+- Provides: Executable algorithm/witness + quantitative bounds
+- Properties: Verifiable AND operational
+- Best for: Automation, composition, downstream computation, algorithm extraction
+- Example: Banach fixed-point with convergence rate
+- Trade-offs: May require additional hypotheses like moduli or separability; proofs can be more technical
+
+**2. Classical Proof (C3–C5) — Traditional mathematics**
+- Provides: Logical correctness
+- Properties: Verifiable but NOT operational
+- Best for: Pure existence results where witnesses unnecessary; elegant general theorems
+- Example: Excluded middle arguments, non-constructive fixed-points
+- Trade-offs: No extraction; less automation support; may be shorter and more elegant
+
+**3. Interactive/PCP (Probabilistic Checkable Proofs) — Complexity theory**
+- Provides: Succinct certificates verifiable via randomness
+- Properties: Efficiently verifiable, usually not operational
+- Best for: Complexity-theoretic results, very large proofs, cryptographic applications
+- Example: Zero-knowledge proofs, PCP theorem
+- Trade-offs: No algorithmic content; specialized verification model; not compositional for algorithm synthesis
+
+**Why we focus on constructive witnesses:**
+For AI systems producing executable artifacts (certified algorithms, verified software, computational mathematics), constructive witnesses provide both verification and operational content. Other channels serve important purposes but don't enable the extraction and composition goals central to this framework.
+
+**Complementarity:** These approaches aren't mutually exclusive. A system might use classical proofs for pure mathematics, constructive witnesses for algorithmic content, and PCPs for efficient verification of large artifacts. The witness budget framework helps make explicit which approach is being used and what properties result.
+
+---
+
+*Document Version: 3.0*
+*Last Updated: 2025-10-23*
 *License: CC BY 4.0*
 
 ---
