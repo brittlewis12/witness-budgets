@@ -99,6 +99,7 @@ Most mathematics isn't purely constructive or purely classical - it falls on a s
   1. **C5 (Full AC):** Arbitrary products of compact spaces (uncountable, non-Hausdorff)
   2. **C4 (ULBPI):** Products of compact **Hausdorff** spaces (uncountable products), where the Ultrafilter Lemma suffices for this restricted case (Kelley, 1955, General Topology, Ch. 5)
   3. **C2 (DC):** Countable products (constructive or uses only dependent choice)
+- **C1 extractability clarification:** "Extractable if invariance proven" means *consumer computations* are extractable when they use only invariant properties, NOT that witnesses themselves can be extracted. Propositional truncation `∥∃x.P∥` cannot be eliminated into `Type` to obtain a witness without classical choice (which would bump the budget). See §6.4 for precise semantics.
 
 ### 1.2 Budget Calculus: Compositional Tracking
 
@@ -125,6 +126,18 @@ Oversight cost = f(ε) (monotone in effect budget)
 
 This makes witness budgets **mechanically trackable** across library composition.
 
+**Important: C0–C5 as a lossy abstraction**
+The underlying effects {Classical, Truncation, ACω, DC, ULBPI, AC} do NOT form a simple total order or even a lattice with a unique meet/join. For example:
+- A proof using only ULBPI (no LEM) vs. a proof using only Classical (LEM, no choice) are incomparable
+- Mixtures like "Truncation + ACω" don't have a canonical position relative to "Classical alone"
+
+The C0–C5 *scale* is a **monotone abstraction** (Galois connection) from the multi-dimensional effect space into a total order for practical dashboards and CI thresholds. The mapping is conservative:
+- Multiple effect combinations map to the same C-level
+- The "max" composition rule over-approximates (safe but coarse)
+- Finer-grained telemetry could expose multi-label budgets (e.g., "C3, uses: {Classical, Truncation}") while retaining C-badges for simplicity
+
+**Design choice:** Prioritize actionability (single CI threshold, clear badge) over perfect fidelity. Users needing precise effect tracking can inspect the full effect row ε.
+
 ### 1.3 What Budgets Tell Us
 
 **For automation:** Lower budgets provide more handles for proof search
@@ -133,8 +146,8 @@ This makes witness budgets **mechanically trackable** across library composition
 - C3–C5: Fewer algorithmic landmarks, harder automation
 
 **For extraction:** Only C0–C2 generally support program extraction
-- C0: Direct extraction of algorithms
-- C1: Extract when consumers are invariant
+- C0: Direct extraction of witnesses and algorithms
+- C1: Extract consumer computations when they use only invariant properties (witnesses themselves not extractable without classical choice)
 - C2: Extract with countable/sequential structure
 - C3+: Usually no extraction possible
 
@@ -889,26 +902,33 @@ theorem banach_fp :
 
 **Verification:** Extracted code comes with machine-checked proof that it implements the theorem correctly.
 
-**C1 (Truncation) Extraction Semantics:**
+**C1 (Truncation) Consumption Semantics:**
 
-The framework claims C1 is extractable when consumers prove invariance, but the mechanism requires clarification:
+**Critical distinction:** C1 is **consumable by invariant clients**, not **extractable for witnesses**. Propositional truncation `∥∃x.P∥` does NOT permit extracting a witness into Type without classical choice. What C1 enables is computing results that don't depend on *which* witness exists.
 
-**In Coq/Agda:** Propositional truncation `∥∃x.P∥` typically erases to unit during extraction. To extract computational content:
-1. Consumer must prove the result is independent of which witness is chosen via `Quot.lift` or naturality proof
-2. Extraction proceeds by *eliminating the truncation* through the invariance proof, yielding the underlying witness type
-3. The extracted code computes a witness, but correctness proof references only invariant properties
+**In Coq/Agda:** Propositional truncation `∥∃x.P∥` erases to unit during extraction. Consumers cannot extract a witness, but can:
+1. Compute results that use only invariant properties (properties true for all witnesses)
+2. Factor computations through quotients via `Quot.lift` with a congruence proof
+3. Extract the consumer's result (not the witness) because it doesn't depend on representative choice
 
-**Example workflow (Coq):**
+**What extraction yields:**
+- ✗ Cannot extract: a specific witness satisfying P
+- ✓ Can extract: a result computed from invariant properties only
+- The extracted code runs WITHOUT choosing/computing any witness
+
+**Example: Invariant consumption (not witness extraction):**
 ```coq
-(* Producer: C1 budget *)
-Definition exists_solution : ∥{x : X | P x}∥ := ...
+(* Producer: C1 budget - provides truncated existence *)
+Axiom exists_root : ∥{x : R | x * x = 2}∥.
 
-(* Consumer proves invariance *)
-Lemma result_invariant : forall x y, P x -> P y -> f x = f y.
+(* Consumer computes a result using ONLY the existence, not the value *)
+Definition root_exists_bool : bool := true.  (* just witnesses the existence *)
 
-(* Extraction: lift through quotient *)
-Definition extracted_f : X :=
-  Quot.lift (fun x => f (proj1_sig x)) result_invariant exists_solution
+(* This is extractable because it doesn't need the witness value *)
+(* Extraction yields: let root_exists_bool = true *)
+
+(* INVALID: trying to extract the witness itself *)
+(* Definition get_root : R := ... exists_root ...  -- Cannot eliminate ∥·∥ into Type! *)
 ```
 
 **Concrete Lean 4 example:**
@@ -932,12 +952,16 @@ theorem width_independent_of_midpoint (a b : ℝ) (h : a < b)
 ```
 
 This example shows:
-1. Producer provides `Nonempty` (truncation) rather than constructive witness
-2. Consumer (`interval_width`) uses only invariant properties (a, b, h) - never accesses the midpoint
-3. Extraction succeeds because the computation doesn't depend on which midpoint exists
-4. Linter prevents extracting the witness directly (would require classical choice)
+1. Producer provides `Nonempty` (truncation), asserting existence without constructing a witness
+2. Consumer (`interval_width`) computes a result using ONLY invariant data (a, b, h) — never references the midpoint
+3. Extraction succeeds: extracts `interval_width`, NOT any midpoint witness
+4. Linter blocks attempts to extract witnesses directly (would require classical choice and bump budget to C3+)
 
-**Technical gap:** The precise extraction semantics for C1 → executable code when invariance is proven remains an open formalization question. The pragmatic approach is: (a) producers mark truncation explicitly, (b) consumers must provide `Quot.lift` with congruence proof, (c) extraction succeeds if the quotient-lifted definition is computable. This discipline is mechanically enforceable via the invariance linter (§6.3), but a full semantic model relating C1 budgets to extractability requires further theoretical work (see effect system future work in §6.2).
+**Key insight:** C1 "extractability" means *the consumer's computation is extractable*, not *the witness is extractable*. The truncated existence serves as a logical precondition (proof obligation) but contributes no runtime data.
+
+**Metatheorem (informal):** If a consumer function `f` factors through a quotient (via `Quot.lift` or equivalent) with a proof that the result is independent of representative choice, and `f`'s return type is in `Type` (not `Prop`), then `f` is extractable with budget ≤ max(producer's budget with truncation treated as neutral, other dependencies). The witness itself is never extracted; only `f`'s computed result.
+
+**Mechanization status:** This discipline is enforceable via the invariance linter (§6.3) requiring explicit `Quot.lift` + congruence proofs. A full semantic model (e.g., PER semantics relating syntactic C1 annotations to extractability properties) remains future work. The pragmatic implementation treats C1 as "consumable under invariance contract" rather than claiming witness extraction.
 
 ### 6.5 Badge Generation and Documentation (Proposed)
 
@@ -1449,10 +1473,11 @@ This framework presents a research program, not a finished solution. Several sig
 
 ### Technical Gaps Requiring Formalization
 
-**1. C1 Extraction Semantics**
-- **Gap:** Precise extraction semantics for propositional truncation when consumers prove invariance remain incompletely specified
+**1. C1 Consumption Semantics**
+- **Gap:** Precise semantics for when consumer computations using truncated existence are extractable remain incompletely specified
 - **Current state:** Pragmatic discipline (Quot.lift + invariance proofs) is mechanically enforceable but lacks full semantic model
-- **Future work:** Formalize extraction relation: `truncated(∃x.P) + invariance(f) → extractable(f)`; prove soundness/completeness
+- **Clarification:** C1 enables extracting *consumer computations* that use only invariant properties, NOT extracting witnesses themselves
+- **Future work:** Formalize extraction relation: `truncated(∃x.P) + invariance(f) → extractable(f_result)`; prove soundness/completeness via PER semantics or similar
 
 **2. Effect System Compositionality**
 - **Gap:** Simple composition rule `budget(f ∘ g) = max(budget(f), budget(g))` doesn't handle proof-irrelevant classical use
@@ -1478,22 +1503,30 @@ This framework presents a research program, not a finished solution. Several sig
 - **Current mitigation:** Walk compiled proof terms post-elaboration; flag typeclass-synthesized classical instances
 - **Limitation:** Conservative over-approximation; may mis-classify some proofs
 
+**6. Prop/Type Flow Sensitivity**
+- **Gap:** Current budget inference does not distinguish Prop-only uses of classical axioms from Type-level uses that block extraction
+- **Issue:** A proof may use `Classical.choice` in a Prop-only subproof (verification only, doesn't affect extraction) vs. using it to produce computational content in Type (blocks extraction)
+- **Example:** Classical proof of `P : Prop` used only in correctness argument → budget could be lower; classical choice producing `x : Type` → must bump budget
+- **Current state:** Inference conservatively flags all uses of classical axioms regardless of whether they flow into Type or remain in Prop
+- **False positives:** Proofs marked C3+ even when classical reasoning is Prop-confined and extraction succeeds
+- **Future work:** Add elimination-context tracking (does classical artifact flow into Type?); distinguish Prop-only vs Type-affecting uses; refine budget assignment based on extraction relevance
+
 ### Empirical Uncertainties
 
-**6. Training Data Distribution Confound**
+**7. Training Data Distribution Confound**
 - **Limitation:** Current LLMs overwhelmingly trained on classical mathematics
 - **Risk:** H1 automation results confound intrinsic structure with distributional familiarity
 - **Addressed in:** §7.1 with mitigation strategies, but remains major validity threat
 - **Open question:** How much of automation benefit persists after controlled fine-tuning on balanced corpora?
 
-**7. Performance of Extracted Code**
+**8. Performance of Extracted Code**
 - **Uncertainty:** Will extracted algorithms be competitive with hand-coded implementations?
 - **Current target:** ≤10× slowdown threshold
 - **Risk:** Constant factors, memory overhead, compilation time may be prohibitive for practical use
 - **Mitigation:** Hand-optimized shims for critical paths; profiling and optimization as explicit workstream
 - **Open question:** What percentage of real applications can tolerate extraction overhead?
 
-**8. Dual-Rail Maintenance Burden**
+**9. Dual-Rail Maintenance Burden**
 - **Uncertainty:** Is maintaining both classical and constructive variants sustainable at library scale?
 - **Risk:** Contributor fatigue; version drift; coordination overhead
 - **Mitigation strategies proposed:** `@[witness_of]` linking; "constructive islands" targeting
@@ -1501,30 +1534,30 @@ This framework presents a research program, not a finished solution. Several sig
 
 ### Scope Boundaries
 
-**9. Not a General Alignment Solution**
+**10. Not a General Alignment Solution**
 - **Explicit non-goal:** This framework addresses mathematical reasoning, not value learning, deception, or robustness
 - **Scope limitation:** Useful for AI systems producing executable artifacts from formal specs; irrelevant for most AI safety challenges
 - **Honest assessment:** Even perfect success wouldn't solve alignment broadly
 
-**10. Limited to Applicable Domains**
+**11. Limited to Applicable Domains**
 - **Works well:** Optimization, separable analysis, numerical methods, finite mathematics
 - **Works poorly:** Pure set theory, category theory, non-separable functional analysis, general topology
 - **Fundamental limitation:** Some mathematics genuinely requires high budgets; framework doesn't change this
 
-**11. Classical Mathematics Remains Essential**
+**12. Classical Mathematics Remains Essential**
 - **Not proposing:** Replacement of classical foundations
 - **Reality check:** Full AC needed for algebraic closure, general Hahn-Banach, arbitrary Tychonoff, etc.
 - **Framework position:** Dual-rail coexistence, not constructive monopoly
 
 ### Alternative Architectures Not Addressed
 
-**12. Classical Metalanguage + Refinement Types**
+**13. Classical Metalanguage + Refinement Types**
 - **Alternative approach:** Use classical logic with explicit refinement types for computational content
 - **Potential advantage:** Avoids bootstrapping problem; works with existing mathlib
 - **Not explored:** This framework focuses on constructive discipline, not refinement type approach
 - **Open question:** Would refinement types provide equivalent benefits with lower adoption cost?
 
-**13. Proof-Carrying Code Without Full Formalization**
+**14. Proof-Carrying Code Without Full Formalization**
 - **Alternative:** Generate proof certificates for extracted code without formalizing full theorem
 - **Trade-off:** Less trustworthy but more practical for legacy code
 - **Framework stance:** Prioritizes full formalization; PCC approach complementary but different
