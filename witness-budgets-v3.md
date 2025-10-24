@@ -83,21 +83,21 @@ This document argues that:
 
 Most mathematics isn't purely constructive or purely classical - it falls on a spectrum. The witness budget framework makes this spectrum explicit and measurable:
 
-| Level | Name | Principles | What You Get | Typical Examples |
-|-------|------|------------|--------------|------------------|
-| **C0** | Fully Witnessful | Intuitionistic logic only | Witness + algorithm + bounds | Finite combinatorics; Banach fixed-point with explicit rate |
-| **C1** | Existence-Only (invariants-only use; ∥∃x.P∥ in HoTT) | Propositional truncation | Logical existence; consumers must use invariant properties only | "A solution exists" where downstream uses only solution-independent facts |
-| **C2** | Countable Choice | ACω, DC (sequential/countable choices) | Often extractable, works for most analysis | Cauchy subsequences; separable Hilbert spaces; completeness arguments |
-| **C3** | Classical Logic | LEM (excluded middle) only | Verifiable but often non-executable | Many classical proofs that avoid choice; decidability by cases |
-| **C4** | Choice Fragments | Ultrafilter Lemma ≡ Boolean Prime Ideal (ULBPI) | Domain-specific oracles | Stone-Čech compactification; Tychonoff for compact Hausdorff spaces |
-| **C5** | Full Choice | AC ≡ Zorn's Lemma ≡ Well-Ordering Principle | Global arbitrary selection; minimal witness content | Arbitrary vector space bases; Hahn-Banach (non-separable, full generality); Tychonoff for arbitrary uncountable products; well-ordering reals |
+| Level | Name | Principles | What You Get | Extractable? | Typical Examples |
+|-------|------|------------|--------------|--------------|------------------|
+| **C0** | Fully Witnessful | Intuitionistic logic only | Witness + algorithm + bounds | ✓ Yes | Finite combinatorics; Banach fixed-point with explicit rate |
+| **C1** | Existence-Only (invariants-only use; ∥∃x.P∥ in HoTT) | Propositional truncation | Logical existence; consumers must use invariant properties only | ✓ If invariance proven | "A solution exists" where downstream uses only solution-independent facts |
+| **C2** | Countable Choice | ACω, DC (sequential/countable choices) | Often extractable, works for most analysis | ✓ Often | Cauchy subsequences; separable Hilbert spaces; completeness arguments |
+| **C3** | Classical Logic | LEM (excluded middle) only | Verifiable but often non-executable | ✗ Usually not | Many classical proofs that avoid choice; decidability by cases |
+| **C4** | Choice Fragments | Ultrafilter Lemma ≡ Boolean Prime Ideal (ULBPI) | Domain-specific oracles | ✗ No | Stone-Čech compactification; Tychonoff for compact Hausdorff spaces |
+| **C5** | Full Choice | AC ≡ Zorn's Lemma ≡ Well-Ordering Principle | Global arbitrary selection; minimal witness content | ✗ No | Arbitrary vector space bases; Hahn-Banach (non-separable, full generality); Tychonoff for arbitrary uncountable products; well-ordering reals |
 
 **Key technical notes:**
 - Zorn's Lemma is equivalent to full AC (over ZF), not a weaker fragment - it belongs in C5
 - Ultrafilter Lemma and Boolean Prime Ideal theorem are equivalent (over ZF) - combined in C4
 - **Tychonoff's theorem has three distinct formulations:**
   1. **C5 (Full AC):** Arbitrary products of compact spaces (uncountable, non-Hausdorff)
-  2. **C4 (ULBPI):** Products of compact **Hausdorff** spaces (uncountable products)
+  2. **C4 (ULBPI):** Products of compact **Hausdorff** spaces (uncountable products), where the Ultrafilter Lemma suffices for this restricted case (Kelley, 1955, General Topology, Ch. 5)
   3. **C2 (DC):** Countable products (constructive or uses only dependent choice)
 
 ### 1.2 Budget Calculus: Compositional Tracking
@@ -538,6 +538,12 @@ The same discipline applies across proof assistants: quantitative content as typ
 **Why full AC is needed:**
 Extension isn't canonical - infinitely many valid norm-preserving extensions exist with no rule for distinguishing them. The classical proof uses Zorn's Lemma (equivalent to AC) to construct one.
 
+**Important distinction:** Hahn-Banach provides *extension of linear functionals*, not vector space *bases*. These are separate AC-dependent results:
+- **Hahn-Banach:** extends functionals (maps V → ℝ) from subspaces to whole space
+- **Hamel basis theorem (§5.3):** asserts existence of bases (linearly independent spanning sets) for arbitrary vector spaces
+
+Both require AC for general spaces, but for different reasons and with different constructive alternatives. Avoid conflating them.
+
 **Constructive alternatives and their scope:**
 
 **Alternative 1: Separable spaces (C2)**
@@ -576,7 +582,7 @@ Extension isn't canonical - infinitely many valid norm-preserving extensions exi
 - Control theory: State space representations
 
 **Why full AC is needed:**
-For infinite-dimensional, non-structured spaces (like ℝ over ℚ), constructing a basis requires infinitely many arbitrary choices. Even specifying one basis element may require AC.
+For infinite-dimensional spaces without computable structure (e.g., ℝ regarded as a vector space over ℚ), constructing a basis requires infinitely many arbitrary choices. Even specifying one basis element may require AC.
 
 **Constructive alternatives:**
 
@@ -769,7 +775,7 @@ The budget tracker walks the compiled environment, computing `effects(c)` for ea
 - Model-theoretic principles: Łoś's theorem, ultraproducts, compactness, and saturation are curated as C4/C5 (ULBPI/AC) via explicit axiom lists
 - Budgets are cached per module; imported modules contribute their cached budgets to local inference
 
-**Future work:** A full formalization of the effect system semantics requires addressing (see Part IX-B for extended discussion):
+**Future work:** A full formalization of the effect system semantics requires addressing (see Part X for extended discussion):
 - Soundness/completeness lemmas relating syntactic budget inference to semantic extractability
 - Precise handling of impredicative Prop vs Type distinctions in dependent type theory
 - Effect polymorphism and universe polymorphism interactions
@@ -777,6 +783,8 @@ The budget tracker walks the compiled environment, computing `effects(c)` for ea
 - Budget inference for metaprogramming and elaboration-time computation
 
 **Impredicativity note:** Lean and Coq's impredicative `Prop` universe introduces non-constructive aspects orthogonal to witness budgets. Impredicative quantification (defining a proposition by quantifying over all propositions including itself) can hide computational content even without LEM or AC. For example, `∀ P : Prop, P → P` is impredicative and erases during extraction. The witness budget framework focuses on oracle effects (LEM, AC variants); full constructive discipline would also require predicative foundations or explicit tracking of impredicative definitions. This represents a separate axis of constructive content beyond the C0–C5 scale, potentially addressable via universe level tracking or predicativity linters in future work.
+
+**Linter behavior for impredicativity:** The current budget linter *does not* demote or penalize a proof that merely quantifies over `Prop`; we conservatively treat impredicative definitions as budget-neutral (neither bumping nor reducing budget). A proof using impredicative `Prop` receives the same budget as it would in a predicative formulation, unless it also invokes LEM/AC/etc. This is a pragmatic choice; a stricter discipline would flag impredicativity separately.
 
 The pragmatic inference algorithm described here is conservative (may over-approximate budgets) and refinable via explicit `@[witness_budget]` annotations. It provides actionable telemetry for library-scale adoption while these theoretical questions are resolved.
 
@@ -890,7 +898,7 @@ The framework claims C1 is extractable when consumers prove invariance, but the 
 2. Extraction proceeds by *eliminating the truncation* through the invariance proof, yielding the underlying witness type
 3. The extracted code computes a witness, but correctness proof references only invariant properties
 
-**Example workflow:**
+**Example workflow (Coq):**
 ```coq
 (* Producer: C1 budget *)
 Definition exists_solution : ∥{x : X | P x}∥ := ...
@@ -902,6 +910,32 @@ Lemma result_invariant : forall x y, P x -> P y -> f x = f y.
 Definition extracted_f : X :=
   Quot.lift (fun x => f (proj1_sig x)) result_invariant exists_solution
 ```
+
+**Concrete Lean 4 example:**
+```lean
+-- Producer: provides truncated existence (C1)
+axiom exists_midpoint : ∀ (a b : ℝ), a < b → Nonempty {x // a < x ∧ x < b}
+
+-- Consumer: proves result is invariant under choice of midpoint
+def interval_width (a b : ℝ) (h : a < b) : ℝ := b - a
+
+theorem width_independent_of_midpoint (a b : ℝ) (h : a < b)
+  (x y : {x // a < x ∧ x < b}) :
+  interval_width a b h = interval_width a b h := rfl
+
+-- Extraction succeeds: width is computable WITHOUT picking a specific midpoint
+#eval interval_width 0 10 (by norm_num : (0 : ℝ) < 10)  -- 10
+
+-- Key: invariant_only means we CAN'T do this (would bump budget to C3):
+-- def bad_use (a b : ℝ) (h : a < b) : ℝ :=
+--   (Classical.choice (exists_midpoint a b h)).val  -- ✗ blocked by linter
+```
+
+This example shows:
+1. Producer provides `Nonempty` (truncation) rather than constructive witness
+2. Consumer (`interval_width`) uses only invariant properties (a, b, h) - never accesses the midpoint
+3. Extraction succeeds because the computation doesn't depend on which midpoint exists
+4. Linter prevents extracting the witness directly (would require classical choice)
 
 **Technical gap:** The precise extraction semantics for C1 → executable code when invariance is proven remains an open formalization question. The pragmatic approach is: (a) producers mark truncation explicitly, (b) consumers must provide `Quot.lift` with congruence proof, (c) extraction succeeds if the quotient-lifted definition is computable. This discipline is mechanically enforceable via the invariance linter (§6.3), but a full semantic model relating C1 budgets to extractability requires further theoretical work (see effect system future work in §6.2).
 
@@ -1409,7 +1443,7 @@ Extraction provides guarantees that manual translation cannot:
 
 ---
 
-## Part IX-B: Limitations and Open Questions
+## Part X: Limitations and Open Questions
 
 This framework presents a research program, not a finished solution. Several significant limitations and open questions require explicit acknowledgment:
 
@@ -1537,7 +1571,7 @@ This document presents a **framework and research program**, not validated concl
 
 ---
 
-## Part X: Conclusion
+## Part XI: Conclusion
 
 ### 10.1 What We've Established
 
@@ -1634,7 +1668,7 @@ Not whether witness budgets are a useful concept (they are), but whether the aut
 
 ---
 
-## Part XI: Related Work
+## Part XII: Related Work
 
 This work sits at the intersection of program extraction, Curry-Howard/realizability, proof mining, computable analysis, reverse mathematics, program synthesis, formal libraries, and AI for theorem proving. Prior efforts establish the foundations and many powerful techniques; what's missing is a library-scale discipline with metrics and CI that ties constructive content to automation and extraction outcomes. We position our contribution as integration + enforcement + empirical validation. For a summary of our contributions vs prior work, see the "What's New in This Paper" section at the document opening.
 
@@ -1803,9 +1837,12 @@ For any collection of non-empty sets {Sᵢ}ᵢ∈I, there exists a function f su
 - **Intuitionistic logic:** Constructive reasoning rules
 - **Dependent Choice (DC):** Sequential choices from non-empty sets
 - **Countable Choice (ACω):** Choice from countable collections (sometimes)
-- **Markov's Principle:** For decidable predicates, ¬¬∃x.P(x) → ∃x.P(x) (sometimes)
+- **Markov's Principle (MP):** For decidable predicates, ¬¬∃x.P(x) → ∃x.P(x) (sometimes)
 
 **Schools of constructivism differ** on exactly which principles to accept. The witness budget framework doesn't assume one school, but tracks usage of various principles.
+
+**Budget calculus treatment of Markov's Principle:**
+The current budget framework treats Markov's Principle (when used) as **C3 (Classical)**, treating it as a limited law-of-excluded-middle that enables non-constructive reasoning for existence claims. Future refinements could introduce a separate budget level between C0 and C3 for "weak classical principles" (MP, limited LEM for specific decidable types), but the current C0–C5 scale treats MP-dependent proofs as C3 for simplicity.
 
 ### A.3 Proof Assistants
 
@@ -1875,6 +1912,9 @@ For proof term Γ ⊢ t : A, define:
 
 **Reverse Mathematics:**
 - Simpson, S. G. (2009). *Subsystems of Second Order Arithmetic*
+
+**Topology:**
+- Kelley, J. L. (1955). *General Topology*. Van Nostrand.
 
 ### B.2 Key Papers
 
