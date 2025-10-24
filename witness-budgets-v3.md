@@ -86,7 +86,7 @@ Most mathematics isn't purely constructive or purely classical - it falls on a s
 | Level | Name | Principles | What You Get | Extractable? | Typical Examples |
 |-------|------|------------|--------------|--------------|------------------|
 | **C0** | Fully Witnessful | Intuitionistic logic only | Witness + algorithm + bounds | ✓ Yes | Finite combinatorics; Banach fixed-point with explicit rate |
-| **C1** | Existence-Only (invariants-only use; ∥∃x.P∥ in HoTT) | Propositional truncation | Logical existence; consumers must use invariant properties only | ✓ If invariance proven | "A solution exists" where downstream uses only solution-independent facts |
+| **C1** | Existence-Only (invariants-only use; ∥∃x.P∥ in HoTT) | Propositional truncation | Logical existence; consumers must use invariant properties only | ✓ Consumer computations (not witnesses) | "A solution exists" where downstream uses only solution-independent facts |
 | **C2** | Countable Choice | ACω, DC (sequential/countable choices) | Often extractable, works for most analysis | ✓ Often | Cauchy subsequences; separable Hilbert spaces; completeness arguments |
 | **C3** | Classical Logic | LEM (excluded middle) only | Verifiable but often non-executable | ✗ Usually not | Many classical proofs that avoid choice; decidability by cases |
 | **C4** | Choice Fragments | Ultrafilter Lemma ≡ Boolean Prime Ideal (ULBPI) | Domain-specific oracles | ✗ No | Stone-Čech compactification; Tychonoff for compact Hausdorff spaces |
@@ -132,9 +132,29 @@ The underlying effects {Classical, Truncation, ACω, DC, ULBPI, AC} do NOT form 
 - Mixtures like "Truncation + ACω" don't have a canonical position relative to "Classical alone"
 
 The C0–C5 *scale* is a **monotone abstraction** (Galois connection) from the multi-dimensional effect space into a total order for practical dashboards and CI thresholds. The mapping is conservative:
-- Multiple effect combinations map to the same C-level
+- Multiple effect combinations map to the same C-level (e.g., `{Classical, Truncation}` vs `{ACω, DC}` might both be C3 despite different extraction properties)
 - The "max" composition rule over-approximates (safe but coarse)
 - Finer-grained telemetry could expose multi-label budgets (e.g., "C3, uses: {Classical, Truncation}") while retaining C-badges for simplicity
+- **For power users:** Tooling should provide a "view full effect row ε" option to inspect the precise effect set when dashboard badges are insufficient for understanding extraction behavior
+
+**Concrete example of over-approximation:**
+```lean
+-- Classical lemma used only in Prop, doesn't affect extraction
+lemma classical_helper : P ∨ ¬P := Classical.em P  -- C3
+
+-- Algorithm that uses classical_helper only in a proof obligation, not in computation
+theorem extractable_algorithm (n : Nat) : Nat :=
+  let result := n + 1
+  -- Proof that result satisfies some property, using classical_helper
+  have h : result > n ∨ result ≤ n := classical_helper
+  result  -- Computational part is C0; classical reasoning confined to Prop
+
+-- Current budget inference: marked C3 (over-approximation via max rule)
+-- Ideal with Prop/Type flow analysis: should be C0 for extraction purposes
+-- The classical_helper flows only into Prop (the proof h), not into the extracted result
+```
+
+This example shows why Prop/Type flow sensitivity (§X.6) would refine budget inference: computational content is extractable even when classical reasoning appears in proof obligations.
 
 **Design choice:** Prioritize actionability (single CI threshold, clear badge) over perfect fidelity. Users needing precise effect tracking can inspect the full effect row ε.
 
@@ -155,6 +175,16 @@ The C0–C5 *scale* is a **monotone abstraction** (Galois connection) from the m
 - Classical proofs verify successfully in Lean/Coq
 - Verification ≠ operational content
 - Both matter for practical AI systems
+
+**Connection to "soft" vs "hard" methods:**
+
+Mathematicians often distinguish between **soft methods** (existence arguments via compactness, Zorn's Lemma, ultrafilters, topological or order-theoretic principles) and **hard/quantitative methods** (explicit constructions with rates, moduli, and computational bounds). This distinction maps cleanly onto witness budgets:
+
+- **C3–C5 are "soft" methods:** Prove existence via non-constructive principles; elegant and general, but provide no algorithm or rate. Typical soft tools: excluded middle arguments, Zorn's Lemma for maximal elements, ultrafilter compactness arguments.
+
+- **C0–C2 are "hard/quantitative" methods:** Explicit constructions with computable witnesses, convergence rates, and error bounds. These methods may require additional hypotheses (separability, moduli, countable structure) but deliver operational content.
+
+The witness budget framework makes this **methodological distinction operational and enforceable**. Quantitative API contracts (§2) are not merely philosophical preference but a systematic engineering discipline: they surface the "hard" content (rates, bounds, witnesses) at the type level, making it available for composition, automation, and extraction. This perspective explains why the framework targets C0–C2 formulations in domains where both soft and hard approaches exist: not because soft methods are wrong, but because AI systems producing executable artifacts require the operational content that only hard methods provide.
 
 ### 1.4 Two Concrete Examples
 
@@ -339,6 +369,8 @@ This is not obvious—classical proofs can be shorter and sometimes easier for c
 **Mechanistic rationale:**
 
 1. **Execution-prunable witnesses (CEGIS-style pruning).** When existentials live in Type (C0–C2), candidate witnesses can be run and falsified locally. This adds a cheap, ground-truth rejection test at many nodes of the search tree, reducing effective branching. In dependent type theory, `∃ x, P x` at constructive levels becomes a Σ-type whose inhabitant `(x, p)` can be partially validated by computation (normalization + running x) before finishing the logical part p. This supplies a local verifier for many search nodes; in proof-search terms it's a low-cost refutation oracle that reduces branching.
+
+   **Limitation:** This mechanism only applies when (a) the witness type is enumerable/executable (`∃ x : Nat, P x` can enumerate and test; `∃ x : Real, P x` or `∃ f : Nat → Nat, P f` generally cannot), and (b) the property is efficiently checkable. This may apply to a smaller fraction of mathematical proofs than initially expected. Additionally, current proof search in Lean doesn't actually execute candidate witnesses during search (unlike CEGIS-style program synthesis), so realizing this benefit would require modifying proof search infrastructure—a non-trivial engineering effort. The hypothesis is that this mechanism *could* improve automation if implemented, but it's not automatic from constructive structure alone.
 
 2. **Sequential structure as search constraints.** DC/ACω yield program shape (Σ/Π structure, recursion over ℕ). This constrains the synthesis space (fewer admissible terms) and narrows tactic choices.
 
@@ -963,6 +995,37 @@ This example shows:
 
 **Mechanization status:** This discipline is enforceable via the invariance linter (§6.3) requiring explicit `Quot.lift` + congruence proofs. A full semantic model (e.g., PER semantics relating syntactic C1 annotations to extractability properties) remains future work. The pragmatic implementation treats C1 as "consumable under invariance contract" rather than claiming witness extraction.
 
+---
+
+**Formal Statements (for future mechanization):**
+
+**No-Elimination Lemma (Truncation → Type):**
+In the absence of classical choice axioms, propositional truncation `∥∃x:A. P x∥ : Prop` cannot be eliminated into `Type` to yield a computational witness of type `{x : A // P x} : Type`. Any such elimination requires invoking `Classical.choice` or equivalent, which bumps the witness budget to ≥ C3.
+
+*Precise formulation (Lean 4):*
+There exists no term `extract : ∀ {A : Type} {P : A → Prop}, Nonempty {x // P x} → {x // P x}` that is definable without using `Classical.choice`, `Classical.inhabited_of_nonempty`, or equivalent axioms. Any implementation of such a term necessarily increases the witness budget.
+
+*Analogue in HoTT:* The propositional truncation modality `∥-∥ : Type → Prop` does not admit an eliminator into `Type`; the universal property only permits eliminations into `Prop`. See HoTT Book §3.7 for the formal statement.
+
+---
+
+**Invariant-Consumption Metatheorem (Informal):**
+Let `E` be an equivalence relation on type `A`, and let `f : A → R` be a function with return type `R : Type`. If:
+1. There exists a truncated existence claim `h : Nonempty A` (C1), and
+2. `f` is defined via `Quot.lift g respect_proof` where `respect_proof : ∀ x y, E x y → g x = g y`, and
+3. The result type `R` is in `Type` (not `Prop`),
+
+then the consumer function `f` is **extractable with the truncation treated as budget-neutral**. That is:
+```
+budget(f) ≤ max(budget(dependencies of g), C0)
+```
+
+The witness itself from `h : Nonempty A` is never extracted; only the invariant computation `g` (proven independent of representative choice) is extracted.
+
+*Mechanization requirement:* To enforce this discipline, the invariance linter must recognize `Quot.lift` applications and verify the accompanying congruence proof. Functions consuming truncated existence without an explicit invariance proof must retain the producer's C1 budget or higher.
+
+---
+
 ### 6.5 Badge Generation and Documentation (Proposed)
 
 From budget inference, the system would generate visible documentation:
@@ -998,7 +1061,11 @@ The framework is designed for incremental adoption without breaking changes to e
 - Constructive → classical by erasing witnesses (always possible, loses operational content)
 - **Maintenance overhead mitigation:** Link theorems via `@[witness_of classical_lemma]` attribute; share statements via wrappers/instances; prioritize "constructive islands" (optimization, separable analysis) rather than library-wide duplication
 
-**Honest assessment of dual-rail burden:** Even with linking attributes and shared infrastructure, maintaining both classical and constructive variants will increase maintenance costs. **API drift** is inevitable—when classical lemmas are refactored, constructive variants must be updated in sync, or the pairing breaks. Conservative estimate: **~1.3–1.5× maintenance overhead** per theorem pair based on similar dual-API systems in other libraries. This overhead is **only justifiable** if automation gains, extraction benefits, or application value exceeds the engineering cost. **Pilot testing** the dual-rail approach on a small module (e.g., `Mathlib.Topology.MetricSpace.Contracting`) with explicit tracking of maintenance friction (PR conflicts, update lag, contributor complaints) is essential before scaling. If pilot data shows unsustainable overhead, the framework should pivot to **constructive-only sublibraries** rather than library-wide dual-rail.
+**Honest assessment of dual-rail burden:** Even with linking attributes and shared infrastructure, maintaining both classical and constructive variants will increase maintenance costs. **API drift** is inevitable—when classical lemmas are refactored, constructive variants must be updated in sync, or the pairing breaks.
+
+**Concrete drift scenario:** Developer refactors classical `continuous_function_has_max` to add a new `Bounded` hypothesis. They update all downstream classical proofs but don't know/care about the constructive variant. The constructive version lags, automated statement-sync checks flag the divergence, but nobody prioritizes fixing it for weeks. Eventually, someone must reconcile diverged APIs, often requiring non-trivial proof adjustments. Multiply this across dozens of theorem pairs and the coordination overhead compounds.
+
+Conservative estimate: **~1.3–1.5× maintenance overhead** per theorem pair based on similar dual-API systems in other libraries (e.g., sync/async Rust APIs, typed/untyped Python). This overhead is **only justifiable** if automation gains, extraction benefits, or application value exceeds the engineering cost. **Pilot testing** the dual-rail approach on a small module (e.g., `Mathlib.Topology.MetricSpace.Contracting`) with explicit tracking of maintenance friction (PR conflicts, update lag, contributor complaints) is essential before scaling. If pilot data shows unsustainable overhead, the framework should pivot to **constructive-only sublibraries** rather than library-wide dual-rail.
 
 **Budget overlays:**
 - Per-directory thresholds configured in `witness_budget.toml`
@@ -1039,7 +1106,7 @@ Introducing this framework at scale involves real engineering costs and risks:
 5. **Scope boundary risks:** Without clear delineation of "constructive islands," the dual-rail approach may expand beyond tractable boundaries
 
 **Mitigations:**
-- Link paired theorems via `@[witness_of]` attributes for coordinated maintenance
+- Link paired theorems via `@[witness_of]` attributes for coordinated maintenance—the attribute would link constructive variants to their classical counterparts, enabling automated checks that theorem statements remain synchronized (e.g., when classical version gains a new hypothesis, constructive version is flagged for review) and providing bidirectional navigation in documentation
 - Target high-value "constructive islands" (optimization, separable analysis) rather than library-wide duplication
 - Opt-in per-directory enforcement with explicit justification mechanisms for budget overruns
 - Badge incentives and extraction showcases to demonstrate value
@@ -1050,6 +1117,7 @@ Introducing this framework at scale involves real engineering costs and risks:
 - <15% PR rejection rate due to budget violations (after initial adoption period)
 - Measurable automation improvements (pass@k, tactic steps) justifying the dual-rail overhead
 - Extraction success rate >80% for C0–C2 formalized theorems
+- **Contributor engagement:** ≥3 new active contributors to constructive formalization in first year (measured by merged PRs to constructive variants or budget-tracked modules), indicating community buy-in beyond mere compliance
 
 If these thresholds aren't met, honest documentation of adoption costs vs. benefits would inform whether the framework should be recommended for broader use.
 
@@ -1097,11 +1165,16 @@ Current LLMs are trained on existing mathematical corpora, which are overwhelmin
 - **Familiarity vs. structure:** Constructive proofs may be less familiar, not inherently harder to find
 - **Distribution shift:** Lower success on C0–C2 could reflect unfamiliarity rather than disconfirm H1
 
-**Mitigation strategies:**
-1. **Controlled fine-tuning:** Train ablation models on balanced classical/constructive corpora from constructive analysis textbooks (Bishop, Bridges)
-2. **Cross-domain transfer:** Test on domains where classical and constructive formulations are equally represented in training (finite mathematics, basic analysis)
-3. **Prompt engineering:** Provide constructive lemma libraries in context to reduce distribution gap
-4. **Decomposition analysis:** Measure whether *specific constructive structures* (Σ-types, explicit moduli, sequential choice) provide search benefits when isolated, controlling for overall proof style familiarity
+**Primary validation experiment:**
+To address this confound head-on, a **controlled fine-tuning experiment on a balanced corpus** should be a core component of the validation plan, not merely a mitigation:
+1. **Controlled fine-tuning:** Pre-train or fine-tune a model on a balanced mix of classical and constructive mathematics from constructive analysis textbooks (Bishop, Bridges), constructive type theory sources, and extracted mathlib constructive variants
+2. **A/B comparison:** Run the automation metrics (pass@k, steps, time) on this balanced-corpus model vs. the standard classical-trained baseline
+3. **Causal inference:** If the balanced model shows equal or improved performance on C0–C2 formulations, this isolates intrinsic structural benefits from distributional familiarity
+
+**Additional mitigation strategies:**
+1. **Cross-domain transfer:** Test on domains where classical and constructive formulations are equally represented in training (finite mathematics, basic analysis)
+2. **Prompt engineering:** Provide constructive lemma libraries in context to reduce distribution gap
+3. **Decomposition analysis:** Measure whether *specific constructive structures* (Σ-types, explicit moduli, sequential choice) provide search benefits when isolated, controlling for overall proof style familiarity
 
 **Reporting requirement:** Evaluation must explicitly separate:
 - **(a) Intrinsic structural benefits** of C0–C2 (execute-to-prune, typed interfaces, sequential constraints)
@@ -1109,7 +1182,13 @@ Current LLMs are trained on existing mathematical corpora, which are overwhelmin
 
 If H1 fails due to (b), that's a negative result about current model training, not about the framework. If H1 succeeds despite (b), that's stronger evidence for intrinsic benefits.
 
-**Methodological requirement:** A credible evaluation requires publishing negative results. If H1 were to fail, analysis of where constructive structure didn't translate into search gains would be essential. Training data confounds must be analyzed and reported transparently.
+**Deeper confound: Architectural suitability**
+
+Even with balanced fine-tuning, transformer architectures trained predominantly on classical mathematics may develop representational structure (embedding space geometry, attention patterns, internal representations) that encodes classical proof strategies as primary axes of variation. If so, constructive proofs could remain "off-manifold" even after exposure to balanced data—not because they're harder in principle, but because the architecture is constitutively unsuited to exploit their structure.
+
+**Implication:** If balanced-corpus fine-tuning fails to close the performance gap, this doesn't necessarily invalidate H1's structural hypothesis. It might instead indicate that **architectural interventions** are needed: proof-state encoders that explicitly represent Σ-types, execution traces for witnesses, sequential/compositional proof representations, etc. Exploring alternative architectures (graph neural networks over proof DAGs, neuro-symbolic hybrids with explicit witness tracking) could be necessary to test the structural hypothesis fairly.
+
+**Methodological requirement:** A credible evaluation requires publishing negative results. If H1 were to fail, analysis of where constructive structure didn't translate into search gains would be essential. Training data confounds must be analyzed and reported transparently. If architectural limitations are suspected, this should be flagged as a direction for future investigation rather than evidence against the framework's core claims.
 
 **Performance Hypothesis:**
 Extracted algorithms from constructive proofs are competitive with hand-coded implementations.
@@ -1122,7 +1201,7 @@ Extracted algorithms from constructive proofs are competitive with hand-coded im
 
 **Validation outcome:** Performance hypothesis is supported if extracted implementations meet wall-clock (≤10×) and accuracy thresholds on ≥80% of test cases. Report detailed profiling for outliers to identify optimization opportunities.
 
-**Realistic expectations:** The ≤10× slowdown target is aspirational. Extracted code from dependent type theory often exhibits higher constant factors, memory overhead, and compilation costs compared to hand-optimized implementations. For performance-critical applications, **hand-optimized shims** for hot paths may be necessary, and some extracted algorithms may not be competitive with carefully tuned hand-coded baselines. The value proposition is strongest for: (a) rapid prototyping with correctness guarantees, (b) domains where bugs are more costly than performance penalties (safety-critical systems, verified science), and (c) applications where the certified bounds themselves are the primary deliverable. Honest reporting of performance characteristics—including cases where extraction underperforms—is essential for establishing realistic expectations about when extracted code is deployment-ready versus when it serves primarily as a verified specification.
+**Realistic expectations:** The ≤10× slowdown target is aspirational. For context, Coq extraction to OCaml typically yields 2–5× slowdown for simple algorithms, but can be significantly worse (10–50×) for heavily dependently-typed code with complex term representations. Lean extraction similarly varies widely depending on type complexity and optimization opportunities. Extracted code from dependent type theory often exhibits higher constant factors, memory overhead, and compilation costs compared to hand-optimized implementations. For performance-critical applications, **hand-optimized shims** for hot paths may be necessary, and some extracted algorithms may not be competitive with carefully tuned hand-coded baselines. The value proposition is strongest for: (a) rapid prototyping with correctness guarantees, (b) domains where bugs are more costly than performance penalties (safety-critical systems, verified science), and (c) applications where the certified bounds themselves are the primary deliverable. Honest reporting of performance characteristics—including cases where extraction underperforms—is essential for establishing realistic expectations about when extracted code is deployment-ready versus when it serves primarily as a verified specification.
 
 **Hygiene Hypothesis:**
 Measurable decline in representative-picking violations after linter adoption.
