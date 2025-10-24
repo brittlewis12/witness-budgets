@@ -16,6 +16,30 @@ This document presents a research framework and evaluation design for operationa
 
 ---
 
+## Table of Contents
+
+- [What's New in This Paper](#whats-new-in-this-paper)
+- [Executive Summary](#executive-summary)
+- [Target Audiences & Contribution Asks](#target-audiences--contribution-asks)
+- [Part I: The witness budget framework](#part-i-the-witness-budget-framework)
+- [Part II: Philosophical foundations](#part-ii-philosophical-foundations)
+- [Part III: From oversight to automation — logical vs operational transparency](#part-iii-from-oversight-to-automation--logical-vs-operational-transparency)
+- [Part IV: Proof mining and quantitative content](#part-iv-proof-mining-and-quantitative-content)
+- [Part V: Applied mathematics case studies](#part-v-applied-mathematics-case-studies)
+- [Part VI: Implementation and instrumentation](#part-vi-implementation-and-instrumentation)
+- [Part VII: Research program and validation](#part-vii-research-program-and-validation)
+- [Part VIII: Objections and responses](#part-viii-objections-and-responses)
+- [Part IX: Community and collaboration](#part-ix-community-and-collaboration)
+- [Part X: Limitations and open questions](#part-x-limitations-and-open-questions)
+- [Part XI: Conclusion](#part-xi-conclusion)
+- [Part XII: Related work](#part-xii-related-work)
+- [Appendix A: Technical definitions](#appendix-a-technical-definitions)
+- [Appendix B: Resources and references](#appendix-b-resources-and-references)
+- [Appendix C: Glossary](#appendix-c-glossary)
+- [Appendix D: Alternative verification channels](#appendix-d-alternative-verification-channels)
+
+---
+
 ## What's New in This Paper
 
 Rather than reiterate the existence of constructive mathematics, this paper introduces a discipline and tooling package that makes operational transparency measurable and enforceable in practice.
