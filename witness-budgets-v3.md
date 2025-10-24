@@ -381,14 +381,14 @@ This synthesis provides missing motivation across three traditionally siloed fie
 **Constructive Mathematics → Modern Relevance**
 - Current view: "Philosophically purer but niche concern"
 - With framework: "Safety requirement for transparent AI"
-- Explains: Century-old work suddenly has civilizational stakes
+- Explains: Century-old work becomes relevant to safe algorithmic reasoning at scale
 - Impact: Makes constructive research directly relevant to AI capabilities
 
 **Formal Methods → Existential Purpose**
 - Current view: "Good for critical software verification"
-- With framework: "Foundation for safe superintelligent reasoning"
+- With framework: "Foundation for safe algorithmic reasoning at scale"
 - Explains: Not just a tool but infrastructure for AI oversight
-- Impact: Elevates from specialized application to civilizational infrastructure
+- Impact: Elevates from specialized application to core AI safety infrastructure
 
 **Important caveat:** These communities care about witness budgets for somewhat different reasons:
 - AI safety: Extractability for oversight and algorithmic composition
@@ -717,7 +717,7 @@ For uncountable products, showing compactness requires choosing accumulation poi
   - Avoid `classical`, `choice`, `noncomputable` keywords
   - Mark classical content explicitly with attributes
   - Use CI rules to enforce constructive discipline in specific directories
-  - Whitelist escape hatches for specific theorems
+  - Allowlist escape hatches for specific theorems
 - Extraction: Requires staying out of `noncomputable` and keeping witnesses in Type (not Prop)
 
 **Reality check:**
@@ -731,7 +731,7 @@ Most formalized mathematics today is classical (especially mathlib). Constructiv
 
 ### 6.2 Budget Instrumentation Design
 
-**Minimal Lean 4 implementation:**
+**Minimal Lean 4 implementation (proposed design):**
 
 ```lean
 /-- Oracle effects in proof -/
@@ -769,12 +769,14 @@ The budget tracker walks the compiled environment, computing `effects(c)` for ea
 - Model-theoretic principles: Łoś's theorem, ultraproducts, compactness, and saturation are curated as C4/C5 (ULBPI/AC) via explicit axiom lists
 - Budgets are cached per module; imported modules contribute their cached budgets to local inference
 
-**Future work:** A full formalization of the effect system semantics requires addressing:
+**Future work:** A full formalization of the effect system semantics requires addressing (see Part IX-B for extended discussion):
 - Soundness/completeness lemmas relating syntactic budget inference to semantic extractability
 - Precise handling of impredicative Prop vs Type distinctions in dependent type theory
 - Effect polymorphism and universe polymorphism interactions
 - Tactic-generated proof terms (where classical reasoning may be introduced implicitly)
 - Budget inference for metaprogramming and elaboration-time computation
+
+**Impredicativity note:** Lean and Coq's impredicative `Prop` universe introduces non-constructive aspects orthogonal to witness budgets. Impredicative quantification (defining a proposition by quantifying over all propositions including itself) can hide computational content even without LEM or AC. For example, `∀ P : Prop, P → P` is impredicative and erases during extraction. The witness budget framework focuses on oracle effects (LEM, AC variants); full constructive discipline would also require predicative foundations or explicit tracking of impredicative definitions. This represents a separate axis of constructive content beyond the C0–C5 scale, potentially addressable via universe level tracking or predicativity linters in future work.
 
 The pragmatic inference algorithm described here is conservative (may over-approximate budgets) and refinable via explicit `@[witness_budget]` annotations. It provides actionable telemetry for library-scale adoption while these theoretical questions are resolved.
 
@@ -785,6 +787,30 @@ Scanner walks compiled proof term, flags uses of:
 - `Quot.out` without `Quot.lift` (representative picking)
 - Known choice lemmas from mathlib (Zorn, Ultrafilter, etc.)
 - Implicit `Classical.propDecidable` via typeclass synthesis
+
+**Tactic-level budget enforcement (proposed):**
+
+To handle tactics that implicitly insert classical reasoning, the framework would need:
+
+**Allowlist of budget-safe tactics:**
+- `intro`, `apply`, `exact`, `constructor`, `cases`, `induction` (when applied to decidable types)
+- `rfl`, `rw`, `simp` (when restricted to constructive lemmas)
+- `ring`, `omega`, `linarith` (decision procedures for decidable domains)
+- Tactics guaranteed not to invoke `Classical.choice` or LEM
+
+**Denylist of tactics that always bump budget:**
+- `by_contra`, `push_neg` (require LEM or double-negation elimination)
+- `classical` (explicitly invokes classical reasoning)
+- `by_cases` without explicit `Decidable` instance (inserts `Classical.propDecidable`)
+- `choose`, `obtain` without witnesses (may use AC implicitly)
+
+**Tactic linter (design specification):**
+- Monitor elaborated proof terms for unexpected classical axiom usage
+- Flag when tactics insert `Classical.propDecidable` or choice axioms without explicit annotation
+- Suggest constructive alternatives: `by_cases (decidable_of ...)` instead of bare `by_cases`
+- Track "budget surprise" metrics: cases where inferred budget exceeds user expectation
+
+**Limitation:** This requires tactic-level instrumentation and may have false positives. The current post-elaboration approach is conservative (over-approximates) but avoids needing to instrument every tactic. A full implementation would need both approaches: post-elaboration scanning (conservative baseline) + tactic-level linting (precise but more invasive).
 
 **CI integration:**
 ```
@@ -801,15 +827,15 @@ directory_budgets = {
 # 3. PR increases budgets without justification
 ```
 
-### 6.3 Invariance Linter
+### 6.3 Invariance Linter (Proposed)
 
 **Problem:** Code uses `choose`, `some`, `Classical.some` to pick representatives, but doesn't prove choice is irrelevant.
 
 **Solution:** Enforce invariance discipline
 
-**Invariance enforcement:**
+**Invariance enforcement (design specification):**
 
-The linter flags raw representative-picking (`Classical.some`, `Quot.out`, `choose`) unless the consumer factors through `Quot.lift`/`Quotient.lift` with a supplied congruence proof, or is marked `@[invariant_only]` with an explicit invariance lemma. This makes the "doesn't matter which" principle mechanically checkable: if the choice truly doesn't matter, the naturality proof should exist.
+The linter would flag raw representative-picking (`Classical.some`, `Quot.out`, `choose`) unless the consumer factors through `Quot.lift`/`Quotient.lift` with a supplied congruence proof, or is marked `@[invariant_only]` with an explicit invariance lemma. This makes the "doesn't matter which" principle mechanically checkable: if the choice truly doesn't matter, the naturality proof should exist.
 
 ```lean
 /-- Mark consumers using only invariant properties -/
@@ -822,13 +848,13 @@ structure Invariant {X : Type} (f : X → R) (E : X → X → Prop) :=
   (respect : ∀ {x y}, E x y → f x = f y)
 ```
 
-**Linter checks:**
-- Flags: `choose`, `epsilon`, `Classical.some`, `Quot.out`
+**Linter checks (proposed behavior):**
+- Would flag: `choose`, `epsilon`, `Classical.some`, `Quot.out`
 - Unless: Consumer marked `@[invariant_only]` with naturality proof
-- Suggests: Reformulate using `Quot.lift` or prove invariance
-- Tracks: Violations in dashboard, trends over time
+- Would suggest: Reformulate using `Quot.lift` or prove invariance
+- Would track: Violations in dashboard, trends over time
 
-**This enforces the doesn't matter which principle** - if choice truly doesn't matter, prove it.
+**This would enforce the doesn't matter which principle** - if choice truly doesn't matter, prove it.
 
 ### 6.4 Extraction Pipeline
 
@@ -855,9 +881,33 @@ theorem banach_fp :
 
 **Verification:** Extracted code comes with machine-checked proof that it implements the theorem correctly.
 
-### 6.5 Badge Generation and Documentation
+**C1 (Truncation) Extraction Semantics:**
 
-From budget inference, generate visible documentation:
+The framework claims C1 is extractable when consumers prove invariance, but the mechanism requires clarification:
+
+**In Coq/Agda:** Propositional truncation `∥∃x.P∥` typically erases to unit during extraction. To extract computational content:
+1. Consumer must prove the result is independent of which witness is chosen via `Quot.lift` or naturality proof
+2. Extraction proceeds by *eliminating the truncation* through the invariance proof, yielding the underlying witness type
+3. The extracted code computes a witness, but correctness proof references only invariant properties
+
+**Example workflow:**
+```coq
+(* Producer: C1 budget *)
+Definition exists_solution : ∥{x : X | P x}∥ := ...
+
+(* Consumer proves invariance *)
+Lemma result_invariant : forall x y, P x -> P y -> f x = f y.
+
+(* Extraction: lift through quotient *)
+Definition extracted_f : X :=
+  Quot.lift (fun x => f (proj1_sig x)) result_invariant exists_solution
+```
+
+**Technical gap:** The precise extraction semantics for C1 → executable code when invariance is proven remains an open formalization question. The pragmatic approach is: (a) producers mark truncation explicitly, (b) consumers must provide `Quot.lift` with congruence proof, (c) extraction succeeds if the quotient-lifted definition is computable. This discipline is mechanically enforceable via the invariance linter (§6.3), but a full semantic model relating C1 budgets to extractability requires further theoretical work (see effect system future work in §6.2).
+
+### 6.5 Badge Generation and Documentation (Proposed)
+
+From budget inference, the system would generate visible documentation:
 
 **Example output:**
 ```
@@ -868,13 +918,13 @@ Status: Extractable
 Dependencies: 12 theorems (all ≤ C0)
 ```
 
-**In library docs:**
+**In library docs (envisioned features):**
 - Color-coded badges (green=C0, yellow=C2, red=C5)
 - Budget distribution graphs per module
 - Dependency chains showing budget propagation
 - Trend tracking (budgets over time, by contributor)
 
-**This makes witness budgets visible and trackable**, not hidden in proof internals.
+**This would make witness budgets visible and trackable**, not hidden in proof internals.
 
 ### 6.6 Practical Adoption Path
 
@@ -889,6 +939,8 @@ The framework is designed for incremental adoption without breaking changes to e
 - Classical → constructive via added hypotheses (rates/moduli as inputs)
 - Constructive → classical by erasing witnesses (always possible, loses operational content)
 - **Maintenance overhead mitigation:** Link theorems via `@[witness_of classical_lemma]` attribute; share statements via wrappers/instances; prioritize "constructive islands" (optimization, separable analysis) rather than library-wide duplication
+
+**Honest assessment of dual-rail burden:** Even with linking attributes and shared infrastructure, maintaining both classical and constructive variants will increase maintenance costs. **API drift** is inevitable—when classical lemmas are refactored, constructive variants must be updated in sync, or the pairing breaks. Conservative estimate: **~1.3–1.5× maintenance overhead** per theorem pair based on similar dual-API systems in other libraries. This overhead is **only justifiable** if automation gains, extraction benefits, or application value exceeds the engineering cost. **Pilot testing** the dual-rail approach on a small module (e.g., `Mathlib.Topology.MetricSpace.Contracting`) with explicit tracking of maintenance friction (PR conflicts, update lag, contributor complaints) is essential before scaling. If pilot data shows unsustainable overhead, the framework should pivot to **constructive-only sublibraries** rather than library-wide dual-rail.
 
 **Budget overlays:**
 - Per-directory thresholds configured in `witness_budget.toml`
@@ -978,9 +1030,28 @@ AI theorem provers achieve measurably higher success rates on C0–C2 statements
 - A2: Strip explicit moduli/rates from signatures to test the "quantitative types" effect
 - A3: Force decidability via `Classical.propDecidable` to see impact of implicit classicalization
 
-*Confound acknowledgment:* Current LLMs are trained on existing mathematical corpora, which are overwhelmingly classical. The evaluation design should track whether constructive proofs are simply less familiar to models trained on classical corpora, vs structurally easier to search. This helps disentangle intrinsic benefits from distribution shift effects.
+**CRITICAL CONFOUND: Training Data Distribution**
 
-**Methodological requirement:** A credible evaluation requires publishing negative results. If H1 were to fail, analysis of where constructive structure didn't translate into search gains would be essential.
+Current LLMs are trained on existing mathematical corpora, which are overwhelmingly classical. This creates a significant risk of confounding intrinsic searchability benefits with mere distributional familiarity.
+
+**The confound:**
+- **Training bias:** Models see 95%+ classical proofs in training data (arXiv, textbooks, mathlib)
+- **Familiarity vs. structure:** Constructive proofs may be less familiar, not inherently harder to find
+- **Distribution shift:** Lower success on C0–C2 could reflect unfamiliarity rather than disconfirm H1
+
+**Mitigation strategies:**
+1. **Controlled fine-tuning:** Train ablation models on balanced classical/constructive corpora from constructive analysis textbooks (Bishop, Bridges)
+2. **Cross-domain transfer:** Test on domains where classical and constructive formulations are equally represented in training (finite mathematics, basic analysis)
+3. **Prompt engineering:** Provide constructive lemma libraries in context to reduce distribution gap
+4. **Decomposition analysis:** Measure whether *specific constructive structures* (Σ-types, explicit moduli, sequential choice) provide search benefits when isolated, controlling for overall proof style familiarity
+
+**Reporting requirement:** Evaluation must explicitly separate:
+- **(a) Intrinsic structural benefits** of C0–C2 (execute-to-prune, typed interfaces, sequential constraints)
+- **(b) Distribution effects** (model has seen more classical proofs)
+
+If H1 fails due to (b), that's a negative result about current model training, not about the framework. If H1 succeeds despite (b), that's stronger evidence for intrinsic benefits.
+
+**Methodological requirement:** A credible evaluation requires publishing negative results. If H1 were to fail, analysis of where constructive structure didn't translate into search gains would be essential. Training data confounds must be analyzed and reported transparently.
 
 **Performance Hypothesis:**
 Extracted algorithms from constructive proofs are competitive with hand-coded implementations.
@@ -992,6 +1063,8 @@ Extracted algorithms from constructive proofs are competitive with hand-coded im
 - **Compilation time:** <60 seconds for extracted code compilation (per theorem)
 
 **Validation outcome:** Performance hypothesis is supported if extracted implementations meet wall-clock (≤10×) and accuracy thresholds on ≥80% of test cases. Report detailed profiling for outliers to identify optimization opportunities.
+
+**Realistic expectations:** The ≤10× slowdown target is aspirational. Extracted code from dependent type theory often exhibits higher constant factors, memory overhead, and compilation costs compared to hand-optimized implementations. For performance-critical applications, **hand-optimized shims** for hot paths may be necessary, and some extracted algorithms may not be competitive with carefully tuned hand-coded baselines. The value proposition is strongest for: (a) rapid prototyping with correctness guarantees, (b) domains where bugs are more costly than performance penalties (safety-critical systems, verified science), and (c) applications where the certified bounds themselves are the primary deliverable. Honest reporting of performance characteristics—including cases where extraction underperforms—is essential for establishing realistic expectations about when extracted code is deployment-ready versus when it serves primarily as a verified specification.
 
 **Hygiene Hypothesis:**
 Measurable decline in representative-picking violations after linter adoption.
@@ -1336,6 +1409,134 @@ Extraction provides guarantees that manual translation cannot:
 
 ---
 
+## Part IX-B: Limitations and Open Questions
+
+This framework presents a research program, not a finished solution. Several significant limitations and open questions require explicit acknowledgment:
+
+### Technical Gaps Requiring Formalization
+
+**1. C1 Extraction Semantics**
+- **Gap:** Precise extraction semantics for propositional truncation when consumers prove invariance remain incompletely specified
+- **Current state:** Pragmatic discipline (Quot.lift + invariance proofs) is mechanically enforceable but lacks full semantic model
+- **Future work:** Formalize extraction relation: `truncated(∃x.P) + invariance(f) → extractable(f)`; prove soundness/completeness
+
+**2. Effect System Compositionality**
+- **Gap:** Simple composition rule `budget(f ∘ g) = max(budget(f), budget(g))` doesn't handle proof-irrelevant classical use
+- **Example:** Classical proof used but result doesn't depend on which witness—should downgrade like C1
+- **Future work:** Refine effect system to track proof irrelevance; add downgrading rules for "doesn't matter" classical steps
+
+**3. Impredicativity and Universe Levels**
+- **Gap:** Lean/Coq have impredicative `Prop` which introduces non-constructivity orthogonal to C0–C5 scale
+- **Issue:** Impredicative quantification can hide computational content even without LEM/AC
+- **Current approach:** Pragmatic—budget tracker flags impredicative definitions conservatively
+- **Future work:** Develop unified account of impredicativity + oracle effects; correlate with predicativity hierarchies
+
+**4. Universe Polymorphism Interactions**
+- **Gap:** Budget inference must track universe levels to avoid false negatives in universe-polymorphic definitions
+- **Challenge:** A proof appearing C0 at the term level may use `Type u` in ways that interact with impredicative `Prop`, blocking extraction
+- **Example:** Universe-polymorphic `Quotient.lift` may behave differently depending on whether the codomain is in `Prop` vs `Type`
+- **Current state:** Budget inference operates post-elaboration on monomorphized instances; universe-generic budget tracking is not implemented
+- **Future work:** Extend effect system to track universe parameters; formalize budget preservation under universe instantiation; develop linters for universe-level extractability violations
+
+**5. Tactic-Generated Proof Terms**
+- **Gap:** Budget inference must handle tactic-generated proofs where classical reasoning may be implicit
+- **Challenge:** Tactics can insert classical lemmas invisibly; elaboration may add `Classical.propDecidable`
+- **Current mitigation:** Walk compiled proof terms post-elaboration; flag typeclass-synthesized classical instances
+- **Limitation:** Conservative over-approximation; may mis-classify some proofs
+
+### Empirical Uncertainties
+
+**6. Training Data Distribution Confound**
+- **Limitation:** Current LLMs overwhelmingly trained on classical mathematics
+- **Risk:** H1 automation results confound intrinsic structure with distributional familiarity
+- **Addressed in:** §7.1 with mitigation strategies, but remains major validity threat
+- **Open question:** How much of automation benefit persists after controlled fine-tuning on balanced corpora?
+
+**7. Performance of Extracted Code**
+- **Uncertainty:** Will extracted algorithms be competitive with hand-coded implementations?
+- **Current target:** ≤10× slowdown threshold
+- **Risk:** Constant factors, memory overhead, compilation time may be prohibitive for practical use
+- **Mitigation:** Hand-optimized shims for critical paths; profiling and optimization as explicit workstream
+- **Open question:** What percentage of real applications can tolerate extraction overhead?
+
+**8. Dual-Rail Maintenance Burden**
+- **Uncertainty:** Is maintaining both classical and constructive variants sustainable at library scale?
+- **Risk:** Contributor fatigue; version drift; coordination overhead
+- **Mitigation strategies proposed:** `@[witness_of]` linking; "constructive islands" targeting
+- **Open question:** At what coverage percentage does maintenance burden exceed value?
+
+### Scope Boundaries
+
+**9. Not a General Alignment Solution**
+- **Explicit non-goal:** This framework addresses mathematical reasoning, not value learning, deception, or robustness
+- **Scope limitation:** Useful for AI systems producing executable artifacts from formal specs; irrelevant for most AI safety challenges
+- **Honest assessment:** Even perfect success wouldn't solve alignment broadly
+
+**10. Limited to Applicable Domains**
+- **Works well:** Optimization, separable analysis, numerical methods, finite mathematics
+- **Works poorly:** Pure set theory, category theory, non-separable functional analysis, general topology
+- **Fundamental limitation:** Some mathematics genuinely requires high budgets; framework doesn't change this
+
+**11. Classical Mathematics Remains Essential**
+- **Not proposing:** Replacement of classical foundations
+- **Reality check:** Full AC needed for algebraic closure, general Hahn-Banach, arbitrary Tychonoff, etc.
+- **Framework position:** Dual-rail coexistence, not constructive monopoly
+
+### Alternative Architectures Not Addressed
+
+**12. Classical Metalanguage + Refinement Types**
+- **Alternative approach:** Use classical logic with explicit refinement types for computational content
+- **Potential advantage:** Avoids bootstrapping problem; works with existing mathlib
+- **Not explored:** This framework focuses on constructive discipline, not refinement type approach
+- **Open question:** Would refinement types provide equivalent benefits with lower adoption cost?
+
+**13. Proof-Carrying Code Without Full Formalization**
+- **Alternative:** Generate proof certificates for extracted code without formalizing full theorem
+- **Trade-off:** Less trustworthy but more practical for legacy code
+- **Framework stance:** Prioritizes full formalization; PCC approach complementary but different
+
+### Validation Requirements
+
+**13. Negative Results Must Be Published**
+- **Commitment:** If H1 fails, publish failure analysis
+- **Scientific integrity:** Framework's value depends on honest empirical evaluation
+- **Risk:** Community may not adopt if automation benefits don't materialize
+- **Mitigation:** Design falsifiable experiments; report regardless of outcome
+
+**14. Cross-System Portability Unproven**
+- **Hypothesis:** Budgets should agree across Lean/Coq formalization of same theorem
+- **Reality:** Haven't validated this empirically
+- **Risk:** System-specific axiom availability may cause budget drift
+- **Validation needed:** Parallel formalization case studies
+
+**15. Extraction Success Rate Unknown**
+- **Target:** ≥80% of C0–C2 proofs yield compilable code
+- **Reality:** This is aspirational, not demonstrated
+- **Risks:** Prop/Type discipline violations; impredicativity; performance issues
+- **Validation needed:** Systematic extraction attempts on formalized theorems
+
+### Summary: What We Don't Know
+
+This document presents a **framework and research program**, not validated conclusions. The core claims—that witness budgets matter for automation and that C0–C2 formulations improve extraction—are **hypotheses requiring empirical validation**.
+
+**We honestly don't know:**
+- Whether automation improvements will be large enough to justify engineering costs
+- Whether extracted code will perform acceptably
+- Whether dual-rail maintenance is sustainable
+- Whether training data confounds will dominate intrinsic effects
+- Whether the framework will be adopted by formal methods community
+
+**We do know:**
+- The conceptual framework is coherent
+- The metrics are falsifiable
+- The tooling is implementable
+- The case studies are tractable
+- The questions are answerable through empirical work
+
+**The path forward:** Build, measure, report honestly.
+
+---
+
 ## Part X: Conclusion
 
 ### 10.1 What We've Established
@@ -1382,7 +1583,7 @@ Extraction provides guarantees that manual translation cannot:
 - Modern, high-stakes motivation (AI safety and automation)
 - Practical applications (certified algorithms, verified software)
 - Community expansion beyond foundations specialists
-- Relevance to civilizational-scale technology challenges
+- Relevance to safe algorithmic reasoning at scale
 
 **For Applied Mathematics:**
 - Algorithmic content from proofs, not just existence
