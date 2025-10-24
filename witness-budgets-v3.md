@@ -90,16 +90,28 @@ Most mathematics isn't purely constructive or purely classical - it falls on a s
 | **C2** | Countable Choice | ACω, DC (sequential/countable choices) | Often extractable, works for most analysis | ✓ Often | Cauchy subsequences; separable Hilbert spaces; completeness arguments |
 | **C3** | Classical Logic | LEM (excluded middle) only | Verifiable but often non-executable | ✗ Usually not | Many classical proofs that avoid choice; decidability by cases |
 | **C4** | Choice Fragments | Ultrafilter Lemma ≡ Boolean Prime Ideal (ULBPI) | Domain-specific oracles | ✗ No | Stone-Čech compactification; Tychonoff for compact Hausdorff spaces |
-| **C5** | Full Choice | AC ≡ Zorn's Lemma ≡ Well-Ordering Principle | Global arbitrary selection; minimal witness content | ✗ No | Arbitrary vector space bases; Hahn-Banach (non-separable, full generality); Tychonoff for arbitrary uncountable products; well-ordering reals |
+| **C5** | Full Choice | AC ≡ Zorn's Lemma ≡ Well-Ordering Principle (over ZF) | Global arbitrary selection; minimal witness content | ✗ No | Arbitrary vector space bases; Hahn-Banach (unrestricted, general non-separable normed spaces); Tychonoff for arbitrary uncountable products |
+
+---
+
+**⚠️ CRITICAL: C1 Extractability**
+
+**C1 provides NO witness extraction.** Only consumer computations that are explicitly proven invariant under representative choice are extractable. Propositional truncation `∥∃x.P∥` cannot be eliminated into `Type` to obtain a witness without classical choice (which would bump the budget to C3+).
+
+**What C1 allows:** If you have `∥∃x.P x∥` and a function `f` that you prove is invariant (same result for all witnesses), then you can extract the result of `f`. The witness itself remains inaccessible.
+
+See §6.4 for precise semantics.
+
+---
 
 **Key technical notes:**
 - Zorn's Lemma is equivalent to full AC (over ZF), not a weaker fragment - it belongs in C5
 - Ultrafilter Lemma and Boolean Prime Ideal theorem are equivalent (over ZF) - combined in C4
+- **Hahn-Banach theorem:** General HB is not provable in ZF. Many standard proofs use Zorn's Lemma (thus use C5). However, logical strength varies by variant; several HB forms are strictly weaker than AC. We conservatively budget unrestricted extensions as C4–C5 depending on hypotheses (base field, normed vs. locally convex spaces, separation axioms).
 - **Tychonoff's theorem has three distinct formulations:**
-  1. **C5 (Full AC):** Arbitrary products of compact spaces (uncountable, non-Hausdorff)
-  2. **C4 (ULBPI):** Products of compact **Hausdorff** spaces (uncountable products), where the Ultrafilter Lemma suffices for this restricted case (Kelley, 1955, General Topology, Ch. 5)
-  3. **C2 (DC):** Countable products (constructive or uses only dependent choice)
-- **C1 extractability clarification:** "Extractable if invariance proven" means *consumer computations* are extractable when they use only invariant properties, NOT that witnesses themselves can be extracted. Propositional truncation `∥∃x.P∥` cannot be eliminated into `Type` to obtain a witness without classical choice (which would bump the budget). See §6.4 for precise semantics.
+  1. **C5 (Full AC):** Arbitrary products of compact spaces (no Hausdorff restriction) are equivalent to AC over ZF
+  2. **C4 (ULBPI):** Arbitrary products of compact **Hausdorff** spaces are equivalent to ULBPI/BPI over ZF (Kelley, 1955, General Topology, Ch. 5)
+  3. **C2 (Countable):** Countable products of compact metric spaces are provable constructively with modest principles (via total boundedness + completeness). In general topological spaces, AC_ω or DC is typically used for convenient formulations. We classify standard constructive analyses of the countable case under C2
 
 ### 1.2 Budget Calculus: Compositional Tracking
 
@@ -126,6 +138,17 @@ Oversight cost = f(ε) (monotone in effect budget)
 
 This makes witness budgets **mechanically trackable** across library composition.
 
+**Verification vs extraction budgets:**
+We compute two budgets for each theorem/definition:
+
+- **vBudget (verification budget):** Tracks all effects anywhere in a proof, for logical oversight. This measures what non-constructive principles appear in the proof, even if confined to `Prop`.
+
+- **xBudget (extraction budget):** Tracks only effects that flow into `Type`/computational positions, for program extraction. This measures what non-constructive principles block extraction of executable code.
+
+**Implementation:** Compute effects over all used constants → vBudget. For xBudget, mark nodes whose eliminations target `Type` (or whose produced constants inhabit `Type`) and restrict the effect join to only those edges that flow into computational positions. CI can enforce either or both budgets; dashboards show both badges (e.g., "C2 (xBudget), C4 (vBudget)").
+
+**Example:** A theorem using classical reasoning only in a proof obligation (confined to `Prop`) would have vBudget = C3 but xBudget = C0, indicating that extraction is unaffected even though classical logic appears in the verification.
+
 **Important: C0–C5 as a lossy abstraction**
 The underlying effects {Classical, Truncation, ACω, DC, ULBPI, AC} do NOT form a simple total order or even a lattice with a unique meet/join. For example:
 - A proof using only ULBPI (no LEM) vs. a proof using only Classical (LEM, no choice) are incomparable
@@ -149,12 +172,12 @@ theorem extractable_algorithm (n : Nat) : Nat :=
   have h : result > n ∨ result ≤ n := classical_helper
   result  -- Computational part is C0; classical reasoning confined to Prop
 
--- Current budget inference: marked C3 (over-approximation via max rule)
--- Ideal with Prop/Type flow analysis: should be C0 for extraction purposes
+-- Current vBudget: C3 (classical reasoning appears)
+-- xBudget with Prop/Type flow analysis: C0 (classical reasoning confined to Prop)
 -- The classical_helper flows only into Prop (the proof h), not into the extracted result
 ```
 
-This example shows why Prop/Type flow sensitivity (§X.6) would refine budget inference: computational content is extractable even when classical reasoning appears in proof obligations.
+This example shows why the vBudget/xBudget distinction matters: computational content is extractable (xBudget = C0) even when classical reasoning appears in proof obligations (vBudget = C3).
 
 **Design choice:** Prioritize actionability (single CI threshold, clear badge) over perfect fidelity. Users needing precise effect tracking can inspect the full effect row ε.
 
@@ -550,11 +573,10 @@ The same discipline applies across proof assistants: quantitative content as typ
 **Our working hypothesis:** Much of computational mathematics can be reformulated at C0–C2 with appropriate APIs and quantitative signatures. The case studies below will test this empirically.
 
 **Tier 1: Genuinely needs high budget (C4–C5)**
-- Hahn-Banach theorem (general non-separable normed spaces)
+- Hahn-Banach theorem (unrestricted formulations for general non-separable normed spaces; strength varies by variant)
 - Tychonoff theorem (arbitrary products of compact spaces need C5; compact Hausdorff products need C4)
 - Every vector space has basis (infinite-dimensional, non-separable)
 - Algebraic closure (general fields - uses Zorn, hence C5)
-- Well-ordering reals (definitionally requires full AC)
 
 **Tier 2: Often needs C2–C3, constructive workarounds exist**
 - Functional analysis (many results, but separable spaces reduce budget significantly)
@@ -571,7 +593,7 @@ The same discipline applies across proof assistants: quantitative content as typ
 
 ### 5.2 Case Study 1: Hahn-Banach Theorem
 
-**Classical statement (C5):**
+**Classical statement (typically C5, varies by formulation):**
 "Every continuous linear functional on a subspace of a normed space can be extended to the whole space, preserving norm."
 
 **Where it's used in practice:**
@@ -580,8 +602,8 @@ The same discipline applies across proof assistants: quantitative content as typ
 - Distribution theory: Defining generalized functions (Dirac delta on test functions)
 - Economics: Price theory, supporting hyperplanes for preference sets
 
-**Why full AC is needed:**
-Extension isn't canonical - infinitely many valid norm-preserving extensions exist with no rule for distinguishing them. The classical proof uses Zorn's Lemma (equivalent to AC) to construct one.
+**Why choice principles are needed:**
+Extension isn't canonical - infinitely many valid norm-preserving extensions exist with no rule for distinguishing them. Standard proofs use Zorn's Lemma (equivalent to AC over ZF, thus C5). Note: HB is not provable in ZF, but logical strength varies by variant (some are strictly weaker than AC). This case study focuses on the unrestricted formulation.
 
 **Important distinction:** Hahn-Banach provides *extension of linear functionals*, not vector space *bases*. These are separate AC-dependent results:
 - **Hahn-Banach:** extends functionals (maps V → ℝ) from subspaces to whole space
@@ -809,7 +831,20 @@ def Budget.join (b1 b2 : Budget) : Budget :=
 
 **Inference approach (design specification):**
 
-The budget tracker walks the compiled environment, computing `effects(c)` for each constant by examining its `usedConstants` closure post-elaboration. Direct markers include `@[noncomputable]`, `Classical.*` namespace lemmas, and curated axiom lists for Zorn, ultrafilter lemmas, etc. Implicit classical reasoning is detected via typeclass-synthesized `Classical.propDecidable` instances and tactic-inserted classical lemmas visible in the compiled term. Composition is handled via transitive closure: if `f` calls `g`, `effects(f)` includes `effects(g)`. The inference is conservative—may over-approximate—and can be refined via explicit `@[witness_budget]` annotations.
+The budget tracker walks the compiled environment, computing `effects(c)` for each constant by examining its `usedConstants` closure post-elaboration.
+
+**Lean 4 detection targets:**
+- **`Classical.*` namespace:** `Classical.em`, `Classical.choice`, `Classical.some`, `Classical.choose`
+- **Decidability without instances:** `Classical.decEq`, `Classical.dec`, `Classical.decPred`, etc. (common source of silent classicality)
+- **`by_cases` without `Decidable` instance in scope** (implies classical case split)
+- **`noncomputable` markers:** `noncomputable def`, `noncomputable section` blocks (indicator but not definitive—requires term inspection)
+- **Choice/epsilon operators:** `Classical.epsilon`, Hilbert choice if introduced, any mathlib `choose`/`obtain` sugar resolving to classical choice
+- **Skolemization helpers:** Detection of choice-dependent witnesses
+- **Curated axiom lists:** Zorn's Lemma (`Zorn.zorn`), Ultrafilter Lemma (`Filter.ultrafilter`), AC-dependent mathlib constants
+
+**Important caveat:** `noncomputable` is a useful heuristic but not a proof. It can indicate extraction blockage due to non-decidability without implying classical reasoning (e.g., real arithmetic may be `noncomputable` for computational reasons). Budget inference relies primarily on proof-term scanning for explicit classical/choice artifacts; `noncomputable` alone does not bump the budget.
+
+Implicit classical reasoning is detected via typeclass-synthesized `Classical.propDecidable` instances and tactic-inserted classical lemmas visible in the compiled term. Composition is handled via transitive closure: if `f` calls `g`, `effects(f)` includes `effects(g)`. The inference is conservative—may over-approximate—and can be refined via explicit `@[witness_budget]` annotations.
 
 **Implementation status:** This describes the intended design. Actual implementation would need to handle edge cases such as classical reasoning hidden in imported definitions, universe polymorphism interactions, and tactic-generated proof terms. The algorithm would require validation and refinement during a proof-of-concept phase. A complete empirical study would include published implementation details. An MVP implementation as an open-source Lean 4 plugin would be a natural first proof-of-concept.
 
@@ -938,7 +973,17 @@ theorem banach_fp :
 
 **Critical distinction:** C1 is **consumable by invariant clients**, not **extractable for witnesses**. Propositional truncation `∥∃x.P∥` does NOT permit extracting a witness into Type without classical choice. What C1 enables is computing results that don't depend on *which* witness exists.
 
-**In Coq/Agda:** Propositional truncation `∥∃x.P∥` erases to unit during extraction. Consumers cannot extract a witness, but can:
+**System-specific C1 mappings:**
+
+| System | Truncation representation | Extraction behavior | Invariance mechanism |
+|--------|---------------------------|---------------------|----------------------|
+| **Lean 4 / mathlib** | `Nonempty α : Prop` (truncation proxy) | Consumers must not eliminate to `Type` without choice | Require `Quot.lift` proofs for invariance; flag `Quot.out` usage |
+| **Coq (CIC)** | `exists x, P x` in `Prop` (or explicit squash types) | Extraction erases `Prop`; content must be in `Set`/`Type` | Use `sig` for witnesses; no eliminator from `Prop` truncation to `Set` without classical principles |
+| **Agda** | Propositional truncation (postulate or HIT) | Same `Prop`/`Set` separation as Coq | No eliminator from propositional truncation to `Set` without postulates |
+
+**Key constraint across all systems:** Eliminating truncation into computational types requires choice principles, which would bump the budget to C3+.
+
+**In Coq/Agda detail:** Propositional truncation `∥∃x.P∥` erases to unit during extraction. Consumers cannot extract a witness, but can:
 1. Compute results that use only invariant properties (properties true for all witnesses)
 2. Factor computations through quotients via `Quot.lift` with a congruence proof
 3. Extract the consumer's result (not the witness) because it doesn't depend on representative choice
@@ -1151,10 +1196,33 @@ AI theorem provers achieve measurably higher success rates on C0–C2 statements
 
 **Validation outcome:** H1 is supported if **at least 3 of 5** primary metrics (i, ii, iii, v, vi) meet their thresholds on the evaluation dataset. If fewer than 3 meet thresholds, report as "insufficient evidence for automation benefits" and analyze failure modes.
 
+**Statistical Methodology:**
+
+*Sample size and power:* With N = 40 theorem pairs, we can detect a 15% relative improvement in pass@10 (e.g., 50% → 57.5%) with 80% power at α = 0.05 using a paired bootstrap test. Power calculation assumes typical variance observed in theorem proving benchmarks (standard deviation of paired differences ≈ 0.15 on [0,1] scale). For smaller effect sizes (e.g., 10% relative improvement), N ≈ 60–70 pairs would be needed for adequate power.
+
+*Paired comparisons:* Each theorem is represented by a matched pair (classical formulation, constructive formulation). All metrics are computed as **paired differences** within each theorem. Primary analysis uses paired tests (Wilcoxon signed-rank test for median tactic steps and wall-clock time; paired bootstrap test for pass@k proportions). This controls for theorem-specific difficulty and yields higher statistical power than independent-samples comparisons.
+
+*Reporting:* For each metric, report:
+- Median paired difference with 95% bootstrap confidence interval (10,000 bootstrap resamples)
+- Percentage of pairs showing improvement (directional consistency)
+- Per-topic stratified analysis (e.g., optimization vs. analysis vs. compactness theorems)
+- Full distribution of paired differences (violin plots or histograms)
+
+*Reproducibility:* Fix random seeds for all stochastic components:
+- Proof search: seed per theorem + condition (enables exact reproduction)
+- LLM sampling: temperature, top-p, and seed specified in published config
+- Bootstrap resampling: seed for reproducible CI computation
+All configurations, seeds, theorem pairs, and raw results will be published in a public repository alongside the evaluation.
+
+*Stratification:* Pre-register theorem pairs by topic (optimization, compactness, fixed-point theory, etc.) to enable subgroup analysis. If overall effects are weak but concentrated in one domain, this isolates where structural benefits appear.
+
+*Multiple comparisons:* With 5 primary metrics, we apply Bonferroni correction (α/5 = 0.01 per test) or report uncorrected p-values with explicit multiple-testing caveat. The "3 of 5 thresholds met" rule provides robustness against false positives from multiple testing.
+
 *Ablations:*
 - A1: Disable `execute_to_prune` on C0–C2 to isolate the execution benefit
 - A2: Strip explicit moduli/rates from signatures to test the "quantitative types" effect
 - A3: Force decidability via `Classical.propDecidable` to see impact of implicit classicalization
+- A4: Force vBudget == xBudget (conflate verification and extraction budgets) to demonstrate the value of the Prop/Type flow distinction
 
 **CRITICAL CONFOUND: Training Data Distribution**
 
@@ -1625,7 +1693,7 @@ This framework presents a research program, not a finished solution. Several sig
 
 **12. Classical Mathematics Remains Essential**
 - **Not proposing:** Replacement of classical foundations
-- **Reality check:** Full AC needed for algebraic closure, general Hahn-Banach, arbitrary Tychonoff, etc.
+- **Reality check:** High choice budgets (C4-C5) needed for algebraic closure, unrestricted Hahn-Banach formulations, arbitrary Tychonoff, etc.
 - **Framework position:** Dual-rail coexistence, not constructive monopoly
 
 ### Alternative Architectures Not Addressed
@@ -1685,7 +1753,7 @@ This document presents a **framework and research program**, not validated concl
 
 ## Part XI: Conclusion
 
-### 10.1 What We've Established
+### 11.1 What We've Established
 
 **Philosophical:**
 - Constructive mathematics isn't just aesthetic preference - it's about operational content
@@ -1711,7 +1779,7 @@ This document presents a **framework and research program**, not validated concl
 - Provides concrete research program with measurable milestones
 - Addresses emerging need as AI capabilities expand into formal reasoning
 
-### 10.2 What This Enables
+### 11.2 What This Enables
 
 **For AI Safety:**
 - Technical specification of "transparent oversight" for mathematical reasoning
@@ -1737,7 +1805,7 @@ This document presents a **framework and research program**, not validated concl
 - Verified implementations with certified correctness
 - Bridge to computational systems and AI automation
 
-### 10.3 The Honest Assessment
+### 11.3 The Honest Assessment
 
 **This is NOT:**
 - A solution to all AI safety problems
@@ -1757,7 +1825,7 @@ This document presents a **framework and research program**, not validated concl
 
 **The timing is opportune:** AI capabilities in formal reasoning are emerging now. Building transparent, operational foundations positions us well for safe development of these capabilities.
 
-### 10.4 The Path Forward
+### 11.4 The Path Forward
 
 **This framework is ready to prototype and validate.** The instrumentation would itself be a research contribution; §6 specifies the core mechanisms. A complete empirical study would publish implementation details alongside the design validation.
 
@@ -1784,7 +1852,7 @@ Not whether witness budgets are a useful concept (they are), but whether the aut
 
 This work sits at the intersection of program extraction, Curry-Howard/realizability, proof mining, computable analysis, reverse mathematics, program synthesis, formal libraries, and AI for theorem proving. Prior efforts establish the foundations and many powerful techniques; what's missing is a library-scale discipline with metrics and CI that ties constructive content to automation and extraction outcomes. We position our contribution as integration + enforcement + empirical validation. For a summary of our contributions vs prior work, see the "What's New in This Paper" section at the document opening.
 
-### 11.1 Landscape Overview
+### 12.1 Landscape Overview
 
 | **Area** | **Representative work** | **Gap we address** | **What we add** |
 |----------|------------------------|-------------------|-----------------|
@@ -1797,7 +1865,7 @@ This work sits at the intersection of program extraction, Curry-Howard/realizabi
 | **Formal math libraries** | mathlib, MathComp, Coq stdlib, Isabelle/HOL | No budget tracking; constructive vs classical is binary | Graded budgets, badges, and dual-rail adoption path |
 | **AI for theorem proving** | Neural provers/tactics | No distinction by budget; no extraction guarantees | Budget-aware benchmarks; compositional interfaces via witnesses |
 
-### 11.2 Program Extraction from Proofs
+### 12.2 Program Extraction from Proofs
 
 **Existing work:**
 - Coq's extraction mechanism (Letouzey, 2002) extracts OCaml/Haskell from Set/Type; Prop erases during extraction
@@ -1810,7 +1878,7 @@ This work sits at the intersection of program extraction, Curry-Howard/realizabi
 **Our contribution:**
 - Systematic budget tracking + quantitative type signatures requiring witnesses and rates + CI enforcement + empirical automation evaluation (see §6, §7)
 
-### 11.3 Curry-Howard Correspondence and Realizability
+### 12.3 Curry-Howard Correspondence and Realizability
 
 **Existing work:**
 - Curry-Howard isomorphism (proofs as programs, propositions as types); Kleene realizability and modified realizability (Kreisel, 1959); Dialectica interpretation (Gödel, 1958) for functional interpretation of proofs
@@ -1821,7 +1889,7 @@ This work sits at the intersection of program extraction, Curry-Howard/realizabi
 **Our contribution:**
 - Practical tooling and metrics that make Curry-Howard principles trackable at scale in modern proof assistant libraries (see §6.2–6.5)
 
-### 11.4 Proof Mining (Kohlenbach's Program)
+### 12.4 Proof Mining (Kohlenbach's Program)
 
 **Existing work:**
 - Kohlenbach (2008): *Applied Proof Theory* — systematic extraction of quantitative bounds from classical analysis using Dialectica and bounded functional interpretation
@@ -1834,7 +1902,7 @@ This work sits at the intersection of program extraction, Curry-Howard/realizabi
 **Our contribution:**
 - Combining proof mining insights with type-level quantitative contracts enforced at formalization time; budget telemetry before/after mining; automation metrics (see §4.2–4.3, §7.1)
 
-### 11.5 Computable Analysis and Weihrauch Complexity
+### 12.5 Computable Analysis and Weihrauch Complexity
 
 **Existing work:**
 - Computable analysis (Weihrauch, 2000; Pour-El & Richards, 1989): which analysis objects/functions are computable?
@@ -1847,7 +1915,7 @@ This work sits at the intersection of program extraction, Curry-Howard/realizabi
 **Our contribution:**
 - Practical instrumentation for tracking oracle usage in proof assistants, targeted at AI automation and library engineering; potential future work to correlate budgets with Weihrauch degrees (see §11.9)
 
-### 11.6 Reverse Mathematics (Simpson's Program)
+### 12.6 Reverse Mathematics (Simpson's Program)
 
 **Existing work:**
 - Simpson (2009): *Subsystems of Second Order Arithmetic* — classifying theorems by minimal axiom strength needed to prove them
@@ -1860,7 +1928,7 @@ This work sits at the intersection of program extraction, Curry-Howard/realizabi
 **Our contribution:**
 - Engineering framework that makes axiom tracking actionable for CI/CD and AI automation; budgets guide refactoring, not just classification (see §6.2, §6.6)
 
-### 11.7 Program Synthesis and CEGIS
+### 12.7 Program Synthesis and CEGIS
 
 **Existing work:**
 - Counterexample-Guided Inductive Synthesis (Solar-Lezama, 2008): synthesize programs by iterative refinement
@@ -1872,7 +1940,7 @@ This work sits at the intersection of program extraction, Curry-Howard/realizabi
 **Our contribution:**
 - Bringing execution-guided search principles into theorem proving with budget tracking; measured via witness budgets; evaluation framework for automation benefits (see §7.1)
 
-### 11.8 Formalization Efforts and Proof Assistant Libraries
+### 12.8 Formalization Efforts and Proof Assistant Libraries
 
 **Existing work:**
 - Mathlib (Lean): 150k+ theorems, predominantly classical
@@ -1885,7 +1953,7 @@ This work sits at the intersection of program extraction, Curry-Howard/realizabi
 **Our contribution:**
 - Instrumentation to measure and track budgets in existing libraries; dual-rail adoption strategy with explicit maintenance mitigation (§6.6); empirical evaluation of automation benefits (§7.1)
 
-### 11.9 AI for Theorem Proving
+### 12.9 AI for Theorem Proving
 
 **Existing work:**
 - Neural theorem provers and LLM-driven systems; proof search with language models; tactic prediction and auto-formalization
@@ -1896,7 +1964,7 @@ This work sits at the intersection of program extraction, Curry-Howard/realizabi
 **Our contribution:**
 - Framework for evaluating whether constructive formulations improve AI proof search (Hypothesis H1, §7.1); budget tracking for AI-generated proofs; compositional interfaces via witnesses
 
-### 11.10 Summary: What's Novel Here
+### 12.10 Summary: What's Novel Here
 
 Each component exists in some form. Our contribution is **systematic integration + enforcement + empirical validation:**
 
@@ -1954,7 +2022,11 @@ For any collection of non-empty sets {Sᵢ}ᵢ∈I, there exists a function f su
 **Schools of constructivism differ** on exactly which principles to accept. The witness budget framework doesn't assume one school, but tracks usage of various principles.
 
 **Budget calculus treatment of Markov's Principle:**
-The current budget framework treats Markov's Principle (when used) as **C3 (Classical)**, treating it as a limited law-of-excluded-middle that enables non-constructive reasoning for existence claims. Future refinements could introduce a separate budget level between C0 and C3 for "weak classical principles" (MP, limited LEM for specific decidable types), but the current C0–C5 scale treats MP-dependent proofs as C3 for simplicity.
+The current budget framework treats Markov's Principle (when used) as **C3 (Classical)** for practical dashboard simplicity. This is a **policy choice for coarse binning**: MP is logically strictly weaker than full LEM (it applies only to decidable predicates and double-negated existence), but for implementation simplicity we place it at C3.
+
+**Rationale:** MP enables non-constructive reasoning patterns similar to classical logic, even though it's technically weaker. For teams needing finer granularity, tooling could expose a sub-tier flag "C3-mp" or track MP separately in the full effect row ε (see §1.2 on multi-dimensional effects).
+
+Future refinements could introduce a separate budget level between C2 and C3 for "weak classical principles" (MP, limited LEM for specific decidable types), but the current C0–C5 scale treats MP-dependent proofs as C3 for simplicity and actionability.
 
 ### A.3 Proof Assistants
 
