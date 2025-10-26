@@ -1,0 +1,72 @@
+[
+{
+  "decl": "iterate_n_times.eq_def",
+  "vbudget": "C0",
+  "xbudget": "C0",
+  "triggers": [],
+  "visited_count": 35,
+  "fuel_exhausted": false,
+  "elapsed_ms": 7,
+  "lint_warnings": []
+},
+{
+  "decl": "iterate_n_times.eq_2",
+  "vbudget": "C0",
+  "xbudget": "C0",
+  "triggers": [],
+  "visited_count": 26,
+  "fuel_exhausted": false,
+  "elapsed_ms": 1,
+  "lint_warnings": []
+},
+{
+  "decl": "iterate_n_times._sunfold",
+  "vbudget": "C0",
+  "xbudget": "C0",
+  "triggers": [],
+  "visited_count": 24,
+  "fuel_exhausted": false,
+  "elapsed_ms": 1,
+  "lint_warnings": []
+},
+{
+  "decl": "iterate_n_times",
+  "vbudget": "C0",
+  "xbudget": "C0",
+  "triggers": [],
+  "visited_count": 23,
+  "fuel_exhausted": false,
+  "elapsed_ms": 1,
+  "lint_warnings": []
+},
+{
+  "decl": "iterate_n_times.match_1",
+  "vbudget": "C0",
+  "xbudget": "C0",
+  "triggers": [],
+  "visited_count": 14,
+  "fuel_exhausted": false,
+  "elapsed_ms": 0,
+  "lint_warnings": []
+},
+{
+  "decl": "iterate_n_times._unsafe_rec",
+  "vbudget": "C0",
+  "xbudget": "C0",
+  "triggers": [],
+  "visited_count": 18,
+  "fuel_exhausted": false,
+  "elapsed_ms": 1,
+  "lint_warnings": []
+},
+{
+  "decl": "iterate_n_times.eq_1",
+  "vbudget": "C0",
+  "xbudget": "C0",
+  "triggers": [],
+  "visited_count": 26,
+  "fuel_exhausted": false,
+  "elapsed_ms": 1,
+  "lint_warnings": []
+}
+]
