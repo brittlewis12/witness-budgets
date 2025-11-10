@@ -1,8 +1,10 @@
-/-
-Copyright (c) 2025. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Witness Budget Project
+import Mathlib.Topology.MetricSpace.Basic
+import Mathlib.Topology.MetricSpace.Contracting
+import Mathlib.Analysis.SpecificLimits.Basic
+import Mathlib.Analysis.SpecialFunctions.Log.Basic
+import WBudget.WBudget
 
+/-!
 # Constructive Banach Fixed-Point Theorem
 
 This file contains a constructive formalization of the Banach fixed-point theorem
@@ -26,14 +28,6 @@ with explicit convergence rates and extractable iteration bounds.
 Banach fixed-point theorem, contraction mapping, constructive mathematics,
 witness budgets, program extraction
 -/
-
-import Mathlib.Topology.MetricSpace.Basic
-import Mathlib.Topology.MetricSpace.Contracting
-import Mathlib.Analysis.SpecificLimits.Basic
-import Mathlib.Analysis.SpecialFunctions.Log.Basic
-
--- For budget checking (our own tool)
-import WBudget.WBudget
 
 open Metric Set Filter Topology
 

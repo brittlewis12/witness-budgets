@@ -34,3 +34,18 @@ lean_exe wbudget where
 lean_exe banach_demo where
   root := `BanachDemo
   srcDir := "tests"
+
+-- Newton-Kantorovich extraction demo
+lean_exe newton_demo where
+  root := `NewtonDemo
+  srcDir := "tests"
+
+-- Markov chain extraction demo
+lean_exe markov_demo where
+  root := `MarkovDemo
+  srcDir := "tests"
+
+-- Rellich-Kondrachov 1D extraction demo
+lean_exe qrk1d_demo where
+  root := `QRK1DDemo
+  srcDir := "tests"

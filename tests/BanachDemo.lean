@@ -1,21 +1,5 @@
-/-
-Copyright (c) 2025. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Witness Budget Project
-
-# Banach Fixed-Point Extraction Demo
-
-Executable harness demonstrating extraction of the constructive Banach theorem.
-Tests 6 contraction mappings on ℚ with runtime residual validation.
-
-The theorem is proven generically over any MetricSpace, but the executable demo
-runs over ℚ to enable fully constructive convergence checking (computable dist,
-decidable comparison, printable values).
-
-Run with: `lake exe banach_demo`
--/
-
 import Budgets.BanachExtraction
+import Budgets.ConstructiveQ
 
 open Metric
 
@@ -34,7 +18,7 @@ We define 6 concrete contraction mappings on ℚ to validate extraction:
 namespace BanachDemo
 
 /-! ### Convergence tolerance for runtime validation -/
-def tolerance : ℚ := 1 / 1000000  -- 1e-6
+def toleranceQ : ℚ := 1 / 1000000  -- 1e-6
 
 /-! ### Test Case 1: Linear (K=1/2) -/
 def linear_f : ℚ → ℚ := fun x => x / 2 + 1
@@ -187,15 +171,15 @@ def run_test (name : String) (f : ℚ → ℚ) (x₀ : ℚ) (n_iters : ℕ) : IO
   let residual := abs_rat (x_n - f_x_n)
 
   -- Check convergence constructively (ℚ has decidable <)
-  if residual < tolerance then
+  if residual < toleranceQ then
     IO.println s!"✓ Test: {name}"
     IO.println s!"  Iterations: {n_iters}"
-    IO.println s!"  Residual: {residual} (< {tolerance})"
+    IO.println s!"  Residual: {residual} (< {toleranceQ})"
     IO.println s!"  Status: CONVERGED (xBudget = C0)"
   else
     IO.println s!"✗ Test: {name}"
     IO.println s!"  Iterations: {n_iters}"
-    IO.println s!"  Residual: {residual} (≥ {tolerance})"
+    IO.println s!"  Residual: {residual} (≥ {toleranceQ})"
     IO.println s!"  STATUS: NOT CONVERGED - need more iterations!"
     IO.println s!"  ERROR: Convergence check failed!"
 
@@ -203,33 +187,55 @@ def run_test (name : String) (f : ℚ → ℚ) (x₀ : ℚ) (n_iters : ℕ) : IO
 
 end BanachDemo
 
+namespace ConstructiveDemo
+
+open ConstructiveQ
+
+def tolerance : ConstructiveQ := (1 : ConstructiveQ) / (1000000 : ConstructiveQ)
+
+def linear_f : ConstructiveQ → ConstructiveQ := fun x => x / 2 + 1
+def slow_f : ConstructiveQ → ConstructiveQ := fun x => (9 : ConstructiveQ) * x / 10 + 1 / 10
+def fast_f : ConstructiveQ → ConstructiveQ := fun x => x / 10 + 5
+def piecewise_f : ConstructiveQ → ConstructiveQ := fun x => (7 : ConstructiveQ) * x / 10 + 3 / 10
+def rational_f : ConstructiveQ → ConstructiveQ := fun x => (3 : ConstructiveQ) * x / 5 + 2
+def edge_f : ConstructiveQ → ConstructiveQ := fun x => (99 : ConstructiveQ) * x / 100 + 1 / 100
+
+def abs_q (x : ConstructiveQ) : ConstructiveQ :=
+  if x.num ≥ 0 then x else normalize (-x.num) x.den
+
+def run_test (name : String) (f : ConstructiveQ → ConstructiveQ) (x₀ : ConstructiveQ)
+    (n_iters : ℕ) : IO Unit := do
+  let rec iterate (x : ConstructiveQ) : ℕ → ConstructiveQ
+    | 0 => x
+    | n + 1 => f (iterate x n)
+  let x_n := iterate x₀ n_iters
+  let residual := abs_q (x_n - f x_n)
+  if residual < tolerance then
+    IO.println s!"✓ Test: {name}"
+    IO.println s!"  Iterations: {n_iters}"
+    IO.println s!"  Residual: {residual} (< {tolerance})"
+    IO.println s!"  Status: CONVERGED (ConstructiveQ)"
+  else
+    IO.println s!"✗ Test: {name}"
+    IO.println s!"  Iterations: {n_iters}"
+    IO.println s!"  Residual: {residual} (≥ {tolerance})"
+    IO.println s!"  STATUS: NOT CONVERGED - need more iterations!"
+    IO.println s!"  ERROR: Convergence check failed!"
+  IO.println ""
+
+end ConstructiveDemo
+
 /-! ### Main executable -/
 
 def main : IO Unit := do
   IO.println "=== Banach Fixed-Point Extraction Demo ==="
   IO.println "Constructive fixed-point theorem with xBudget = C0"
-  IO.println "Running over ℚ with runtime convergence validation"
-  IO.println s!"Convergence tolerance: {BanachDemo.tolerance}"
+  IO.println "Running over ConstructiveQ with runtime convergence validation"
+  IO.println s!"Convergence tolerance: {ConstructiveDemo.tolerance}"
   IO.println ""
-
-  -- Test 1: Linear (K=1/2) - fast convergence
-  BanachDemo.run_test "Linear (K=1/2)" BanachDemo.linear_f 0 20
-
-  -- Test 2: Slow (K=9/10) - requires more iterations
-  BanachDemo.run_test "Slow (K=9/10)" BanachDemo.slow_f 0 150
-
-  -- Test 3: Fast (K=1/10) - very fast convergence
-  BanachDemo.run_test "Fast (K=1/10)" BanachDemo.fast_f 0 20
-
-  -- Test 4: Piecewise (K=7/10)
-  BanachDemo.run_test "Piecewise (K=7/10)" BanachDemo.piecewise_f 0 50
-
-  -- Test 5: Rational (K=3/5)
-  BanachDemo.run_test "Rational (K=3/5)" BanachDemo.rational_f 0 35
-
-  -- Test 6: Edge (K=99/100) - very slow convergence, needs many iterations
-  BanachDemo.run_test "Edge (K=99/100)" BanachDemo.edge_f 0 1400
-
-  IO.println "✅ All 6 tests completed!"
-  IO.println "Witness budgets: xBudget = C0 (fully extractable)"
-  IO.println "Convergence: Validated constructively at runtime"
+  ConstructiveDemo.run_test "Linear (K=1/2)" ConstructiveDemo.linear_f 0 20
+  ConstructiveDemo.run_test "Slow (K=9/10)" ConstructiveDemo.slow_f 0 150
+  ConstructiveDemo.run_test "Fast (K=1/10)" ConstructiveDemo.fast_f 0 20
+  ConstructiveDemo.run_test "Piecewise (K=7/10)" ConstructiveDemo.piecewise_f 0 50
+  ConstructiveDemo.run_test "Rational (K=3/5)" ConstructiveDemo.rational_f 0 35
+  ConstructiveDemo.run_test "Edge (K=99/100)" ConstructiveDemo.edge_f 0 1400

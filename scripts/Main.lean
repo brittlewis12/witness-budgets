@@ -22,12 +22,12 @@ structure Args where
 def parseArgs (args : List String) : Except String Args :=
   match args with
   | [] => .error "Usage: wbudget <Module.Name.Prefix> [--format=json|csv]"
-  | [prefix] => .ok { modulePrefix := prefix.toName }
-  | [prefix, fmt] =>
+  | [pfx] => .ok { modulePrefix := pfx.toName }
+  | [pfx, fmt] =>
       if fmt.startsWith "--format=" then
         let formatType := fmt.drop 9
         if formatType == "json" || formatType == "csv" then
-          .ok { modulePrefix := prefix.toName, format := formatType }
+          .ok { modulePrefix := pfx.toName, format := formatType }
         else
           .error s!"Unknown format: {formatType}. Use 'json' or 'csv'"
       else
@@ -35,9 +35,9 @@ def parseArgs (args : List String) : Except String Args :=
   | _ => .error "Usage: wbudget <Module.Name.Prefix> [--format=json|csv]"
 
 /-- Get all declarations matching the prefix -/
-def getDeclsWithPrefix (env : Environment) (prefix : Name) : List Name :=
+def getDeclsWithPrefix (env : Environment) (pfx : Name) : List Name :=
   env.constants.fold (init := []) fun acc name _ =>
-    if prefix.isPrefixOf name then
+    if pfx.isPrefixOf name then
       name :: acc
     else
       acc

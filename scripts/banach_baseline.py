@@ -68,7 +68,7 @@ def main():
 
     # Test 2: Slow (K=0.9)
     slow_f = lambda x: 0.9 * x + 0.1
-    run_test("Slow (K=0.9)", slow_f, 0.0, 100)
+    run_test("Slow (K=0.9)", slow_f, 0.0, 150)
 
     # Test 3: Fast (K=0.1)
     fast_f = lambda x: 0.1 * x + 5
@@ -76,15 +76,15 @@ def main():
 
     # Test 4: Piecewise (K=0.7)
     piecewise_f = lambda x: 0.7 * x + 0.3
-    run_test("Piecewise (K=0.7)", piecewise_f, 0.0, 30)
+    run_test("Piecewise (K=0.7)", piecewise_f, 0.0, 50)
 
     # Test 5: Rational (K=0.6)
     rational_f = lambda x: 0.6 * x + 2
-    run_test("Rational (K=0.6)", rational_f, 0.0, 25)
+    run_test("Rational (K=0.6)", rational_f, 0.0, 35)
 
     # Test 6: Edge (K=0.99)
     edge_f = lambda x: 0.99 * x + 0.01
-    run_test("Edge (K=0.99)", edge_f, 0.0, 500)
+    run_test("Edge (K=0.99)", edge_f, 0.0, 1400)
 
     total_end = time.perf_counter()
     total_time = total_end - total_start

@@ -10,8 +10,11 @@ Each function is marked with:
 - FIX: What the corrected version should look like
 -/
 
--- Import constructive Banach extraction demo
+import Budgets.ConstructiveQ
+import Budgets.NewtonKantorovich
 import Budgets.BanachExtraction
+import Budgets.QRKConstants
+import Budgets.RellichKondrachov1D
 
 namespace SampleModule
 
