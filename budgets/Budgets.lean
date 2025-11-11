@@ -15,6 +15,7 @@ import Budgets.NewtonKantorovich
 import Budgets.BanachExtraction
 import Budgets.QRKConstants
 import Budgets.RellichKondrachov1D
+import Budgets.RellichKondrachov2D
 
 namespace SampleModule
 
