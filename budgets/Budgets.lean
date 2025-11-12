@@ -16,6 +16,7 @@ import Budgets.BanachExtraction
 import Budgets.QRKConstants
 import Budgets.RellichKondrachov1D
 import Budgets.RellichKondrachov2D
+import Budgets.RellichKondrachov3D
 
 namespace SampleModule
 

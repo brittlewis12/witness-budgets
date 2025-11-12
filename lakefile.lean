@@ -54,3 +54,8 @@ lean_exe qrk1d_demo where
 lean_exe qrk2d_demo where
   root := `QRK2DDemo
   srcDir := "tests"
+
+-- Rellich-Kondrachov 3D extraction demo
+lean_exe qrk3d_demo where
+  root := `QRK3DDemo
+  srcDir := "tests"
