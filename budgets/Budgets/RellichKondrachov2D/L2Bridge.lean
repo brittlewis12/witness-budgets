@@ -25,8 +25,6 @@ import Mathlib.MeasureTheory.Integral.Prod
 import Budgets.RellichKondrachov2D
 import Budgets.RellichKondrachov2D.Seq
 
-set_option maxHeartbeats 400000
-
 open MeasureTheory Complex BigOperators AddCircle
 open scoped Real FourierTransform ComplexConjugate
 

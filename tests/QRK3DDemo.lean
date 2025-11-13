@@ -149,12 +149,11 @@ theorem seq3D_1_InH1Ball : InH1Ball (R₁ : ℝ) seq3D_1 := by
         · positivity
     _ ≤ 8 * ((1 + 12 * Real.pi^2) * (1/64)) := by
         unfold h1Weight seq3D_1 support
-        simp only [Finset.sum_insert, Finset.sum_singleton]
+        simp only []
         norm_num
         ring_nf
         have h_nonneg : 0 ≤ Real.pi ^ 2 := sq_nonneg _
         linarith [h_nonneg]
-        all_goals decide
     _ = (1 + 12 * Real.pi^2) / 8 := by ring
     _ ≤ (R₁ : ℝ)^2 := by
         norm_num [R₁]
@@ -252,7 +251,7 @@ theorem seq3D_2_InH1Ball : InH1Ball (R₂ : ℝ) seq3D_2 := by
         · positivity
     _ = 2 * ((1 + 12 * Real.pi^2) * (1/4)) := by
         unfold h1Weight seq3D_2 support
-        simp only [Finset.sum_insert, Finset.sum_singleton]
+        simp only []
         norm_num
         ring
     _ = (1 + 12 * Real.pi^2) / 2 := by ring
@@ -352,7 +351,7 @@ theorem seq3D_3_InH1Ball : InH1Ball (R₃ : ℝ) seq3D_3 := by
         · positivity
     _ = 4 * ((1 + 24 * Real.pi^2) * (1/64)) := by
         unfold h1Weight seq3D_3 support
-        simp only [Finset.sum_insert, Finset.sum_singleton]
+        simp only []
         norm_num
         ring
     _ = (1 + 24 * Real.pi^2) / 16 := by ring

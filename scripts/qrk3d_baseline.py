@@ -1,307 +1,236 @@
 #!/usr/bin/env python3
 """
-QRK-3D Baseline - Python Reference Implementation
+QRK-3D Performance Baseline — Constructive Witness Extraction
 
-Implements 3D grid parameters from RellichKondrachov3D proof
-for compactness witness generation in 3D Fourier coefficient space.
+Faithfully mirrors the Lean demo in `tests/QRK3DDemo.lean`:
+  * Uses the formal test sequences (product corner mode, diagonal mode, mixed mode)
+  * Computes M and δ with the 3D mesh formula δ = ε/(8·(2M+1)²)
+  * Rounds only the non-zero Fourier modes (factored witness) using exact rationals
+  * Checks coefficient boxes and L² error budgets exactly before emitting results
 
-Key computations:
-- M_of(ε, R): Same formula as 1D/2D (dimension-free!)
-- mesh3D(ε, M): Conservative mesh for (2M+1)³ factor
-- IndexSet3D cardinality: (2M+1)³ - 1 (excluding DC mode)
-- Grid explosion analysis
-
-This validates constructive extractability of the 3D compactness proof.
-
-IMPORTANT: We extract the FACTORED witness (M, δ, IndexSet), NOT the full grid!
-The grid size is astronomically large, but the witness parameters are simple.
+Benchmark this script against the Lean binary `qrk3d_demo` for apples-to-apples
+performance comparisons.
 """
 
+from __future__ import annotations
+
 from fractions import Fraction
-from typing import Tuple, List
-import math
+from typing import Dict, Iterable, Tuple
+import time
+
+ComplexFrac = Tuple[Fraction, Fraction]
+ZERO_COMPLEX: ComplexFrac = (Fraction(0), Fraction(0))
+PI_RAT_LB = Fraction(3, 1)
 
 
-# ============================================================================
-# Core Constants
-# ============================================================================
+def ceil_fraction_nonneg(q: Fraction) -> int:
+    if q <= 0:
+        return 0
+    n, d = q.numerator, q.denominator
+    return (n + d - 1) // d
 
-PI_RAT_LB = Fraction(3, 1)  # Conservative π lower bound (same as 1D/2D)
+
+def floor_fraction(q: Fraction) -> int:
+    n, d = q.numerator, q.denominator
+    return n // d
 
 
-# ============================================================================
-# Grid Parameter Computations (3D)
-# ============================================================================
+def complex_sub(a: ComplexFrac, b: ComplexFrac) -> ComplexFrac:
+    return (a[0] - b[0], a[1] - b[1])
 
-def M_of(eps: Fraction, R: Fraction) -> int:
-    """
-    Frequency cutoff M for ε-approximation.
 
-    Formula: M = ⌈R / (π_lb * ε)⌉ + 1
+def complex_sq_abs(z: ComplexFrac) -> Fraction:
+    return z[0] * z[0] + z[1] * z[1]
 
-    DIMENSION-FREE: Same formula as 1D and 2D!
-    This controls the tail error from frequencies outside the cube [-M,M]³.
-    """
+
+class FourierSeq3D:
+    def __init__(self, coeffs: Dict[Tuple[int, int, int], ComplexFrac]):
+        self.coeffs = coeffs
+
+    def a(self, k: Tuple[int, int, int]) -> ComplexFrac:
+        return self.coeffs.get(k, ZERO_COMPLEX)
+
+    def support(self) -> Iterable[Tuple[int, int, int]]:
+        return self.coeffs.keys()
+
+    def is_mean_zero(self) -> bool:
+        return self.a((0, 0, 0)) == ZERO_COMPLEX
+
+
+def m_of(eps: Fraction, R: Fraction) -> int:
     quotient = R / (PI_RAT_LB * eps)
-    return math.ceil(quotient) + 1
+    return ceil_fraction_nonneg(quotient) + 1
 
 
-def mesh3D(eps: Fraction, M: int) -> Fraction:
-    """
-    Grid mesh size δ for coefficient discretization in 3D.
-
-    Formula: δ = ε / (8 * (2*M + 1)²)
-
-    Factor of 8 × (2M+1)² instead of 4 × (2M+1) accounts for:
-    - (2M+1)³ total frequencies (vs (2M+1)² in 2D)
-    - Conservative error budget allocation for 3D
-    """
+def mesh_3d(eps: Fraction, M: int) -> Fraction:
     return eps / (8 * (2 * M + 1) ** 2)
 
 
-def index_set_size_3D(M: int) -> int:
-    """
-    Size of 3D frequency index set [-M,M]³ \\ {(0,0,0)}.
-
-    Returns: (2*M + 1)³ - 1
-
-    The full cube has (2M+1)³ points, minus the DC mode (0,0,0).
-    """
+def index_set_cardinality(M: int) -> int:
     return (2 * M + 1) ** 3 - 1
 
 
-def coeff_bound_3D(R: Fraction, k: Tuple[int, int, int]) -> Fraction:
-    """
-    Rational bound on coefficient magnitude for frequency k = (k1, k2, k3).
-
-    For k ≠ (0,0,0): bound = R (conservative bound)
-    For k = (0,0,0): bound = 0 (mean-zero constraint)
-    """
-    return Fraction(0) if k == (0, 0, 0) else R
-
-
-def coeff_box_radius_3D(bound: Fraction, delta: Fraction) -> int:
-    """
-    Integer radius of coefficient box in complex plane.
-
-    Formula: rad = ⌈bound / δ⌉ + 1
-
-    The box [-rad, rad]² contains all possible discrete
-    coefficient values (real and imaginary parts).
-    """
+def coeff_box_radius(bound: Fraction, delta: Fraction) -> int:
     if bound == 0:
-        return 1  # Minimal box containing (0,0)
-    quotient = bound / delta
-    return math.ceil(quotient) + 1
+        return 1
+    ratio = bound / delta
+    return ceil_fraction_nonneg(ratio) + 1
 
 
-def coeff_box_size_3D(radius: int) -> int:
-    """
-    Number of integer lattice points in [-rad, rad]² (complex coefficient).
-
-    Returns: (2*rad + 1)²
-
-    Each coefficient c_k is discretized to a 2D integer lattice
-    (representing real and imaginary parts).
-    """
-    return (2 * radius + 1) ** 2
+def coeff_bound(R: Fraction, k: Tuple[int, int, int]) -> Fraction:
+    return Fraction(0) if (k[0] == 0 and k[1] == 0 and k[2] == 0) else R
 
 
-# ============================================================================
-# Grid Analysis
-# ============================================================================
+def round_support(seq: FourierSeq3D, delta: Fraction, R: Fraction) -> Dict[Tuple[int, int, int], Tuple[int, int]]:
+    rounded: Dict[Tuple[int, int, int], Tuple[int, int]] = {}
+    for k in seq.support():
+        coeff = seq.a(k)
+        re_scaled = coeff[0] / delta
+        im_scaled = coeff[1] / delta
+        re_int = floor_fraction(re_scaled)
+        im_int = floor_fraction(im_scaled)
+        radius = coeff_box_radius(coeff_bound(R, k), delta)
+        assert abs(re_int) <= radius, f"Real part exceeded box for k={k}"
+        assert abs(im_int) <= radius, f"Imag part exceeded box for k={k}"
+        rounded[k] = (re_int, im_int)
+    return rounded
 
-def analyze_grid_params_3D(eps: Fraction, R: Fraction) -> dict:
-    """
-    Compute all 3D grid parameters for (ε, R) witness package.
 
-    Returns dictionary with:
-    - M: frequency cutoff
-    - delta: mesh size
-    - num_frequencies: |(2M+1)³ - 1|
-    - sample_boxes: list of ((k1,k2,k3), radius, size) for sample frequencies
-    - log10_grid_estimate: rough log₁₀(grid_size)
-    """
-    M = M_of(eps, R)
-    delta = mesh3D(eps, M)
-    num_freqs = index_set_size_3D(M)
+def reconstruct(entry: Tuple[int, int], delta: Fraction) -> ComplexFrac:
+    return (Fraction(entry[0]) * delta, Fraction(entry[1]) * delta)
 
-    # Analyze coefficient boxes for sample frequencies
-    # Sample: DC mode, axis modes, face diagonals, space diagonals, edge modes
-    sample_freqs = [
-        (0, 0, 0),                                    # DC mode (should be zero)
-        (1, 0, 0),                                    # x-axis mode
-        (0, 1, 0),                                    # y-axis mode
-        (0, 0, 1),                                    # z-axis mode
-        (1, 1, 0),                                    # xy-face diagonal
-        (1, 0, 1),                                    # xz-face diagonal
-        (0, 1, 1),                                    # yz-face diagonal
-        (1, 1, 1),                                    # Space diagonal
-        (M // 2, 0, 0) if M > 2 else (1, 0, 0),     # Mid x-axis
-        (M // 2, M // 2, 0) if M > 2 else (1, 1, 0),  # Mid xy-diagonal
-        (M // 2, M // 2, M // 2) if M > 2 else (1, 1, 1),  # Mid space-diagonal
-        (M, 0, 0),                                    # Max x-axis
-        (0, M, 0),                                    # Max y-axis
-        (0, 0, M),                                    # Max z-axis
-        (M, M, 0),                                    # Max xy-face
-        (M, 0, M),                                    # Max xz-face
-        (0, M, M),                                    # Max yz-face
-        (M, M, M),                                    # Corner mode
+
+def rounding_error(seq: FourierSeq3D, rounded: Dict[Tuple[int, int, int], Tuple[int, int]], delta: Fraction) -> Fraction:
+    err = Fraction(0)
+    for k, coeff in seq.coeffs.items():
+        approx = reconstruct(rounded[k], delta)
+        diff = complex_sub(coeff, approx)
+        err += complex_sq_abs(diff)
+    return err
+
+
+def tail_energy(seq: FourierSeq3D, M: int) -> Fraction:
+    total = Fraction(0)
+    for k, coeff in seq.coeffs.items():
+        if any(abs(coord) > M for coord in k):
+            total += complex_sq_abs(coeff)
+    return total
+
+
+def tail_error_budget(R: Fraction, M: int) -> Fraction:
+    if M == 0:
+        return Fraction(0)
+    return (R * R) / (4 * (PI_RAT_LB ** 2) * (M ** 2))
+
+
+def inside_error_budget(M: int, delta: Fraction) -> Fraction:
+    count = index_set_cardinality(M)
+    return Fraction(2 * count, 1) * (delta * delta)
+
+
+def format_fraction(q: Fraction, precision: int = 6) -> str:
+    if q.denominator == 1:
+        return str(q.numerator)
+    return f"{float(q):.{precision}g} ({q.numerator}/{q.denominator})"
+
+
+def format_sq_err(q: Fraction) -> str:
+    return f"{float(q):.6e} (exact = {q.numerator}/{q.denominator})"
+
+
+def seq_product_corners() -> FourierSeq3D:
+    coeffs: Dict[Tuple[int, int, int], ComplexFrac] = {
+        (1, 1, 1): (Fraction(-1, 8), Fraction(0)),
+        (1, 1, -1): (Fraction(1, 8), Fraction(0)),
+        (1, -1, 1): (Fraction(1, 8), Fraction(0)),
+        (1, -1, -1): (Fraction(-1, 8), Fraction(0)),
+        (-1, 1, 1): (Fraction(1, 8), Fraction(0)),
+        (-1, 1, -1): (Fraction(-1, 8), Fraction(0)),
+        (-1, -1, 1): (Fraction(-1, 8), Fraction(0)),
+        (-1, -1, -1): (Fraction(1, 8), Fraction(0)),
+    }
+    return FourierSeq3D(coeffs)
+
+
+def seq_diagonal() -> FourierSeq3D:
+    return FourierSeq3D({
+        (1, 1, 1): (Fraction(0), Fraction(1, 2)),
+        (-1, -1, -1): (Fraction(0), Fraction(-1, 2)),
+    })
+
+
+def seq_mixed_mode() -> FourierSeq3D:
+    return FourierSeq3D({
+        (2, 1, 1): (Fraction(-1, 8), Fraction(0)),
+        (2, -1, 1): (Fraction(1, 8), Fraction(0)),
+        (-2, 1, 1): (Fraction(1, 8), Fraction(0)),
+        (-2, -1, 1): (Fraction(-1, 8), Fraction(0)),
+    })
+
+
+def run_case(name: str, seq_fn, eps: Fraction, R: Fraction) -> None:
+    seq = seq_fn()
+    assert seq.is_mean_zero(), "Lean test sequences are mean-zero"
+
+    M = m_of(eps, R)
+    delta = mesh_3d(eps, M)
+
+    start = time.perf_counter()
+    rounded = round_support(seq, delta, R)
+    elapsed = time.perf_counter() - start
+
+    round_err = rounding_error(seq, rounded, delta)
+    tail_err = tail_energy(seq, M)
+    inside_budget = inside_error_budget(M, delta)
+    tail_budget = tail_error_budget(R, M)
+    total_budget = inside_budget + tail_budget
+    eps_sq = eps * eps
+
+    print(f"╔{'═'*70}╗")
+    print(f"║ {name:<66} ║")
+    print(f"╚{'═'*70}╝")
+    print(f"ε = {eps}  (ε² = {format_sq_err(eps_sq)})")
+    print(f"R = {R}")
+    print(f"M = {M}")
+    print(f"δ = {format_fraction(delta)}")
+    print(f"Index set size = (2M+1)³ - 1 = {index_set_cardinality(M):,}")
+    print(f"Active modes rounded = {len(seq.coeffs):,}")
+    print()
+    print("Witness extraction (Python)")
+    print("──────────────────────────")
+    print(f"Time: {elapsed * 1000:.3f} ms")
+    print()
+    print("Error accounting")
+    print("────────────────")
+    print(f"Actual rounding error : {format_sq_err(round_err)}")
+    print(f"Actual tail energy    : {format_sq_err(tail_err)}")
+    print(f"Inside budget ≤       : {format_sq_err(inside_budget)}")
+    print(f"Tail budget ≤         : {format_sq_err(tail_budget)}")
+    print(f"Total budget ≤        : {format_sq_err(total_budget)}")
+    actual_total = round_err + tail_err
+    print(f"Actual total error    : {format_sq_err(actual_total)}")
+    print(f"Budget covers ε²?     : {'YES' if total_budget <= eps_sq else 'NO'}")
+    print(f"Actual error ≤ ε²?    : {'YES' if actual_total <= eps_sq else 'NO'}")
+    print()
+
+
+def main() -> None:
+    print("╔══════════════════════════════════════════════════════════════════════╗")
+    print("║  QRK-3D Python Baseline — Constructive Witness Extraction           ║")
+    print("║  Matches tests/QRK3DDemo.lean (seq3D_1, seq3D_2, seq3D_3)           ║")
+    print("╚══════════════════════════════════════════════════════════════════════╝")
+    print()
+
+    cases = [
+        ("Test 1: sin(2πx)sin(2πy)sin(2πz)", seq_product_corners, Fraction(1, 10), Fraction(5, 1)),
+        ("Test 2: sin(2π(x+y+z))", seq_diagonal, Fraction(1, 20), Fraction(8, 1)),
+        ("Test 3: mixed high-frequency mode", seq_mixed_mode, Fraction(1, 10), Fraction(13, 1)),
     ]
 
-    sample_boxes = []
-    for k in sample_freqs:
-        bound = coeff_bound_3D(R, k)
-        rad = coeff_box_radius_3D(bound, delta)
-        size = coeff_box_size_3D(rad)
-        sample_boxes.append((k, rad, size))
+    for name, builder, eps, R in cases:
+        run_case(name, builder, eps, R)
 
-    # Grid explosion analysis
-    # Full grid is product of all coefficient boxes: Π_{k ∈ IndexSet} Box_k
-    # This is ASTRONOMICALLY large (10^X where X ~ thousands or more)
-    typical_k = (M // 2, M // 2, M // 2) if M > 1 else (1, 1, 1)
-    typical_bound = coeff_bound_3D(R, typical_k)
-    typical_rad = coeff_box_radius_3D(typical_bound, delta)
-    typical_box_size = coeff_box_size_3D(typical_rad)
-
-    # Grid size is roughly: (typical_box)^(num_freqs)
-    # Report log₁₀ to avoid overflow
-    if typical_box_size > 1:
-        log10_grid_size = num_freqs * math.log10(typical_box_size)
-    else:
-        log10_grid_size = 0
-
-    return {
-        'eps': eps,
-        'R': R,
-        'M': M,
-        'delta': delta,
-        'num_frequencies': num_freqs,
-        'sample_boxes': sample_boxes,
-        'log10_grid_size': log10_grid_size
-    }
-
-
-# ============================================================================
-# Pretty Printing
-# ============================================================================
-
-def print_grid_analysis_3D(analysis: dict) -> None:
-    """Print 3D grid analysis with box-drawing characters."""
-    eps = analysis['eps']
-    R = analysis['R']
-    M = analysis['M']
-    delta = analysis['delta']
-    num_freqs = analysis['num_frequencies']
-    sample_boxes = analysis['sample_boxes']
-    log10_size = analysis['log10_grid_size']
-
-    print("╔══════════════════════════════════════════════════════════════╗")
-    print(f"║  3D Grid Parameters: ε = {eps}, R = {str(R):<26} ║")
-    print("╚══════════════════════════════════════════════════════════════╝")
-    print()
-    print(f"Frequency cutoff:     M = {M}")
-    print(f"Frequency cube:       [-{M}, {M}]³ ∋ (k₁, k₂, k₃)")
-    print(f"Index set size:       |IndexSet3D(M)| = {num_freqs} frequencies")
-    print(f"                      = (2M+1)³ - 1 = {2*M+1}³ - 1")
-    print(f"Grid mesh:            δ = {delta}")
-    print(f"                         ≈ {float(delta):.6e}")
-    print()
-    print("Coefficient Box Analysis (Sample Frequencies)")
-    print("────────────────────────────────────────────────────────────────")
-    print("   (k₁, k₂, k₃)   | Bound    | Radius | Box Size [(2r+1)²]")
-    print("───────────────────|──────────|────────|───────────────────")
-
-    for k, rad, size in sample_boxes:
-        bound = coeff_bound_3D(R, k)
-        k_str = f"({k[0]:2},{k[1]:2},{k[2]:2})"
-        print(f" {k_str:17} | {str(bound):8} | {rad:6} | {size:12,}")
-
-    print()
-    print("Grid Explosion Analysis")
-    print("────────────────────────────────────────────────────────────────")
-
-    if log10_size > 0:
-        print(f"Estimated grid cardinality: ~ 10^{log10_size:.1f} points")
-        print()
-        if log10_size > 100:
-            print("⚠ GRID IS ASTRONOMICALLY LARGE ⚠")
-        if log10_size > 1000:
-            print("(More points than atoms in observable universe!)")
-        print()
-        print("BUT: We extract the FACTORED witness (M, δ, IndexSet),")
-        print("     NOT the full grid enumeration!")
-        print()
-        print("Witness complexity:")
-        print(f"  - M: {M} (single integer)")
-        print(f"  - δ: {delta} (single rational)")
-        print(f"  - IndexSet: [-{M},{M}]³ \\ {{(0,0,0)}} (compact description)")
-        print()
-        print("The witness is EXTRACTABLE despite grid explosion!")
-    else:
-        print("Grid cardinality: small (exact count depends on constraints)")
-    print()
-
-
-# ============================================================================
-# Test Suite
-# ============================================================================
-
-def run_test_3D(name: str, eps: Fraction, R: Fraction) -> None:
-    """Run 3D grid analysis for one (ε, R) pair."""
-    print("╔══════════════════════════════════════════════════════════════╗")
-    print(f"║  {name:<58}  ║")
-    print("╚══════════════════════════════════════════════════════════════╝")
-    print()
-
-    analysis = analyze_grid_params_3D(eps, R)
-    print_grid_analysis_3D(analysis)
-    print()
-
-
-def main():
-    """Run all 3D test cases."""
-    print("╔══════════════════════════════════════════════════════════════╗")
-    print("║  Rellich-Kondrachov 3D Baseline (Python)                    ║")
-    print("║  3D Grid Parameter Computations                              ║")
-    print("╚══════════════════════════════════════════════════════════════╝")
-    print()
-    print("Reference: budgets/Budgets/RellichKondrachov3D proof")
-    print("Computes witness grid parameters for 3D compactness proof")
-    print()
-    print("Formulas:")
-    print(f"  π_lb = {PI_RAT_LB} (rational lower bound)")
-    print("  M(ε,R) = ⌈R/(π_lb·ε)⌉ + 1           [DIMENSION-FREE!]")
-    print("  δ(ε,M) = ε/(8·(2M+1)²)              [3D mesh]")
-    print("  IndexSet3D(M) = [-M,M]³ \\ {(0,0,0)}, size = (2M+1)³ - 1")
-    print()
-
-    # Test 1: Product mode - separable function
-    run_test_3D(
-        "Test 1: Product sine u(x,y,z) = sin(2πx)sin(2πy)sin(2πz)",
-        Fraction(1, 10),
-        Fraction(5, 1)
-    )
-
-    # Test 2: Diagonal mode - non-separable function
-    run_test_3D(
-        "Test 2: Diagonal mode u(x,y,z) = sin(2π(x+y+z))",
-        Fraction(1, 20),
-        Fraction(8, 1)
-    )
-
-    # Test 3: Higher frequency - larger coefficient bounds
-    run_test_3D(
-        "Test 3: Mixed mode with higher frequencies",
-        Fraction(1, 10),
-        Fraction(13, 1)
-    )
-
-    print("╔══════════════════════════════════════════════════════════════╗")
-    print("║ 3D Baseline Status: SUCCESS                                 ║")
-    print("║ All grid parameters computed with exact rational arithmetic ║")
-    print("║ Witness is EXTRACTABLE despite grid explosion!              ║")
-    print("╚══════════════════════════════════════════════════════════════╝")
+    print("All QRK-3D witness extractions completed successfully.")
 
 
 if __name__ == "__main__":

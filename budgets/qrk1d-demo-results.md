@@ -1,23 +1,23 @@
 # Rellich-Kondrachov 1D Demo - Final Results (Demo 4)
 
 **Date**: 2025-10-30
-**Status**: ✅ COMPLETE
+**Status**: Complete
 **xBudget Classification**: C0-C2 (Constructive, no LEM/AC)
 
 ---
 
 ## Executive Summary
 
-Successfully implemented Demo 4: **Constructive witness extraction for Rellich-Kondrachov compactness on the 1D torus**. This demonstrates formal verification and extractable witness data for a fundamental theorem in functional analysis. The demo proves and demonstrates:
+Implemented Demo 4: Constructive witness extraction for Rellich-Kondrachov compactness on the 1D torus. The demo proves and demonstrates:
 
-- **Formal verification**: Complete proof of compactness for mean-zero H¹ functions
-- **Fully constructive**: 3844 lines of pristine formal mathematics with zero axioms
-- **Extractable witness data**: xBudget = C0-C2, fully computable WitnessPkg over ℚ
-- **Constructive architecture**: L² functions connected to ℓ²(ℤ) sequences via Parseval bridge
-- **ℓ² synthetic test cases**: Finite Fourier support sequences (no axiomatization)
-- **Runtime validation**: Grid parameters computed for 3 test cases in both Lean and Python
+- Formal verification: Complete proof of compactness for mean-zero H¹ functions
+- Constructive: 3844 lines of formal mathematics with zero axioms
+- Extractable witness data: xBudget = C0-C2, computable WitnessPkg over ℚ
+- Architecture: L² functions connected to ℓ²(ℤ) sequences via Parseval bridge
+- Test cases: Finite Fourier support sequences (no axiomatization)
+- Runtime validation: Grid parameters computed for 3 test cases in both Lean and Python
 
-This completes the fourth milestone in the demo sequence: **Banach → Newton → Markov → Rellich-Kondrachov**.
+Fourth demo in the sequence: Banach → Newton → Markov → Rellich-Kondrachov.
 
 ---
 
@@ -97,7 +97,7 @@ This completes the fourth milestone in the demo sequence: **Banach → Newton �
 | RellichKondrachov1D.lean | 2,497 | L² theory, Fourier analysis, compactness | ✅ Clean |
 | Seq.lean | 1,156 | Constructive witness grid, extraction layer | ✅ Clean |
 | L2Bridge.lean | 191 | Parseval bridge, soundness theorem | ✅ Clean |
-| **Total** | **3,844** | **Complete formal verification** | **✅ Pristine** |
+| **Total** | **3,844** | **Complete formal verification** | Clean |
 
 ### Build Status
 
@@ -425,45 +425,41 @@ While we don't construct the L² function directly (requires measure theory), th
 
 ### Runtime Benchmarks
 
-**Benchmark command**:
+**Benchmark commands** (2025-11-12):
 ```bash
-hyperfine --warmup 3 --min-runs 20 \
-  './.lake/build/bin/qrk1d_demo' \
-  'python3 scripts/qrk1d_baseline.py'
+hyperfine --warmup 3 --min-runs 50 './.lake/build/bin/qrk1d_demo'
+hyperfine --warmup 3 --min-runs 50 '/opt/homebrew/bin/python3 scripts/qrk1d_baseline.py'
 ```
 
 #### Performance Comparison
 
 | Implementation | Mean Time | Std Dev | Range | Runs | User Time | System Time |
 |----------------|-----------|---------|-------|------|-----------|-------------|
-| Lean (.lake/build/bin/qrk1d_demo) | 31.6 ms | ± 2.5 ms | 29.2 - 42.1 ms | 66 | 22.8 ms | 10.9 ms |
-| Python (scripts/qrk1d_baseline.py) | 15.0 ms | ± 0.9 ms | 13.0 - 18.5 ms | 96 | 13.4 ms | 4.4 ms |
+| Lean (.lake/build/bin/qrk1d_demo) | 35.5 ms | ± 1.0 ms | 34.0 – 39.3 ms | 58 | 22.7 ms | 10.9 ms |
+| Python (python3 scripts/qrk1d_baseline.py) | 20.8 ms | ± 1.1 ms | 19.0 – 27.8 ms | 93 | 13.8 ms | 5.6 ms |
 
-**Performance Ratio**: Python runs **2.11x ± 0.21** faster than Lean
+**Performance Ratio**: Python now runs **≈1.70×** faster than Lean
 
 #### Analysis
 
 **Execution Speed**:
-- Python baseline completes in approximately half the time of the Lean version
-- Both implementations execute in the low tens of milliseconds
-- Both are suitable for interactive use (sub-50ms latency)
+- Lean runs consistently in the mid-30 ms range (~35.5 ms); Python clocks in around 21 ms.
+- The constructive witness remains comfortably sub-50 ms for interactive or CI runs.
 
 **Variance & Stability**:
-- Python shows lower variance (σ = 0.9 ms vs 2.5 ms for Lean)
-- Python has a tighter distribution, indicating more predictable execution
-- Lean exhibited statistical outliers during benchmarking
+- Standard deviation remains tight at ±1.0 ms (Lean) and ±1.1 ms (Python) with stable hardware/system conditions.
+- No statistical outliers were observed in the refreshed runs.
 
 **System Resource Usage**:
-- Lean uses significantly more system time (10.9 ms vs 4.4 ms)
-- Suggests higher I/O or system call overhead in the Lean implementation
-- Both have similar user time overhead relative to total runtime
+- Lean still spends more system time (10.9 ms vs 5.6 ms), reflecting runtime initialization and pretty-printing overhead.
+- User time differs by ~9 ms, which matches the measured wall-clock gap.
 
-**Why Python is Faster**:
+**Why Python Remains Faster**:
 
-1. **Startup overhead**: Lean binary may have higher initialization cost
-2. **Binary size**: Lean executable is 230 MB vs Python's lightweight interpreter
-3. **I/O operations**: Python may handle formatted output more efficiently
-4. **Memory management**: Python's allocator may be better optimized for this workload pattern
+1. **Startup overhead**: The Lean binary initializes the runtime and mathlib environment each invocation.
+2. **Binary size**: A 200 MB Lean executable has heavier paging/relocation costs than CPython’s slim entry point.
+3. **I/O pipeline**: Python’s stdout buffering is slightly leaner for these short prints.
+4. **Allocator behavior**: CPython’s small-object allocator handles the Fraction/dict workflow extremely well.
 
 **Context & Tradeoffs**:
 - This benchmark measures end-to-end metadata computation (M, δ, grid dimensions only)
@@ -472,7 +468,7 @@ hyperfine --warmup 3 --min-runs 20 \
 - For iterative/server workloads, startup costs would amortize differently
 - Python's speed advantage is acceptable given the verification value Lean provides
 
-**Conclusion**: Both implementations are performant for this metadata computation task. Python's 2x speed advantage is offset by Lean's formal correctness guarantees. The absolute performance (15-32 ms) is excellent for both.
+**Conclusion**: Both implementations remain fast; Python's ≈1.70× edge is expected given its lighter runtime, while Lean delivers the formally verified witness with only ~15 ms extra latency.
 
 ---
 
@@ -742,24 +738,24 @@ u(x) = ∑ₖ aₖ e^(2πikx)
 | Banach | ℝ | Contraction | Iteration | ~400 | ~120s | C0 | ✅ Complete |
 | Newton | ℝ | Derivatives | Root approx | ~300 | ~90s | C0 | ✅ Complete |
 | Markov | Fin 3 → ℝ | Eigenvalues | Distribution | ~400 | ~120s | C0 | ✅ Complete |
-| **QRK-1D** | **L²(𝕋)** | **Fourier** | **ε-net** | **3844** | **~90s** | **C0-C2** | **✅ Complete** |
+| **QRK-1D** | **L²(𝕋)** | **Fourier** | **ε-net** | **3844** | **~90s** | **C0-C2** | ✅ Complete |
 
-**QRK-1D distinguishing features**:
-- **Most advanced mathematics**: Sobolev spaces, compactness, Fourier series
-- **Largest codebase**: 10× the size of other demos
-- **Layered architecture**: 3 distinct layers with formal bridges
-- **PDE relevance**: Directly applicable to elliptic/parabolic equations
-- **Witness complexity**: Exponentially large grid (metadata only)
+QRK-1D distinguishing features:
+- Most advanced mathematics: Sobolev spaces, compactness, Fourier series
+- Largest codebase: 10× the size of other demos
+- Layered architecture: 3 distinct layers with formal bridges
+- PDE relevance: Directly applicable to elliptic/parabolic equations
+- Witness complexity: Exponentially large grid (metadata only)
 
-**Complexity comparison**:
-- **Banach**: Simple iteration, converges in 20-1400 steps
-- **Newton**: Quadratic convergence, 5-6 iterations
-- **Markov**: Matrix powers, 3 test cases
-- **QRK-1D**: Grid metadata only (enumeration intractable)
+Complexity comparison:
+- Banach: Simple iteration, converges in 20-1400 steps
+- Newton: Quadratic convergence, 5-6 iterations
+- Markov: Matrix powers, 3 test cases
+- QRK-1D: Grid metadata only (enumeration intractable)
 
-**Mathematical depth**:
-- **Banach/Newton/Markov**: Undergraduate real analysis
-- **QRK-1D**: Graduate functional analysis / PDE theory
+Mathematical depth:
+- Banach/Newton/Markov: Undergraduate real analysis
+- QRK-1D: Graduate functional analysis / PDE theory
 
 ---
 
@@ -974,7 +970,7 @@ All three QRK-1D modules have been analyzed using the witness budget baseline to
 | Executable demo | ✓ | qrk1d_demo (230MB) | ✅ |
 | Python baseline | ✓ | Matches Lean parameters | ✅ |
 | Witness budget analysis | ✓ | 313 decls across 3 modules analyzed | ✅ |
-| Performance benchmark | ✓ | Complete (Python 2.11x faster) | ✅ |
+| Performance benchmark | ✓ | Complete (Python ≈1.70x faster) | ✅ |
 | Documentation | ✓ | This file | ✅ |
 
 **Overall**: 10/10 criteria met.
@@ -1009,30 +1005,28 @@ All three QRK-1D modules have been analyzed using the witness budget baseline to
 
 ## Conclusion
 
-Demo 4 (Rellich-Kondrachov 1D) is **complete and successful**. We have:
+Demo 4 (Rellich-Kondrachov 1D) completes this milestone. Results:
 
-1. ✅ **Proven**: Compactness via constructive ε-nets in 3844 lines of formal verification
-2. ✅ **Extracted**: Computable WitnessPkg with xBudget = C0-C2
-3. ✅ **Constructive approach**: Explicit ℓ² sequences, zero axioms
-4. ✅ **Validated**: Runtime grid metadata computation for 3 test cases
-5. ✅ **Documented**: Complete mathematical background and architectural overview
-6. ✅ **Benchmarked**: Performance comparison complete (Python 2.11x faster, both sub-50ms)
+1. Proven: Compactness via constructive ε-nets in 3844 lines of formal verification
+2. Extracted: Computable WitnessPkg with xBudget = C0-C2
+3. Constructive: Explicit ℓ² sequences, zero axioms
+4. Validated: Runtime grid metadata computation for 3 test cases
+5. Documented: Complete mathematical background and architectural overview
+6. Benchmarked: Performance comparison complete (Python ≈1.70x faster, both sub-50 ms)
 
-**Key Achievement**: This demonstrates that witness budgets can handle **advanced functional analysis** (Sobolev spaces, Fourier series, compactness) with full constructive extraction. The three-layer architecture (analytic ↔ algebraic ↔ constructive) combined with explicit ℓ² sequences provides a blueprint for future PDE-related extractions without sacrificing constructivity.
+Key results: Demonstrates witness budgets can handle functional analysis (Sobolev spaces, Fourier series, compactness) with constructive extraction. The three-layer architecture (analytic ↔ algebraic ↔ constructive) combined with explicit ℓ² sequences provides a pattern for PDE-related extractions.
 
-**Mathematical Significance**: First constructive, formally verified proof of Rellich-Kondrachov compactness in a proof assistant, with extractable witness data.
+Mathematical contribution: Constructive, formally verified proof of Rellich-Kondrachov compactness in a proof assistant, with extractable witness data.
 
-**Technical Innovation**:
-- Constructive approach via explicit ℓ² sequences with finite Fourier support
+Technical features:
+- Explicit ℓ² sequences with finite Fourier support
 - Parseval as extraction bridge (isometric correspondence)
 - Finitary witness statements (no tsum in conclusions)
 - Finset.pi for grid construction (C0, no classical choice)
 - Layered architecture enabling classical proofs with constructive extraction
 - R parameter adjustment based on computed H¹ energies
 
-**Status**: Production-ready for integration into verified PDE solvers and numerical analysis frameworks.
-
-**Next Demo**: Ready to extend to higher dimensions, general domains, or PDE applications. The witness budgets framework has proven capable of handling graduate-level mathematical analysis.
+Status: Framework extends to higher dimensions, general domains, or PDE applications.
 
 ---
 
@@ -1042,10 +1036,10 @@ Demo 4 (Rellich-Kondrachov 1D) is **complete and successful**. We have:
 witness-budgets/
 ├── budgets/
 │   ├── Budgets/
-│   │   ├── RellichKondrachov1D.lean          ✅ 2497 lines, pristine
+│   │   ├── RellichKondrachov1D.lean          ✅ 2497 lines
 │   │   └── RellichKondrachov1D/
-│   │       ├── Seq.lean                       ✅ 1156 lines, pristine
-│   │       └── L2Bridge.lean                  ✅ 191 lines, pristine
+│   │       ├── Seq.lean                       ✅ 1156 lines
+│   │       └── L2Bridge.lean                  ✅ 191 lines
 │   └── qrk1d-demo-results.md                  ✅ This file
 ├── tests/
 │   └── QRK1DDemo.lean                         ✅ 300 lines, executable

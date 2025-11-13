@@ -24,8 +24,6 @@ This mirrors the 1D/2D proof structure exactly.
 
 -/
 
-set_option linter.unusedTactic false
-
 open scoped BigOperators ComplexConjugate Real
 
 namespace ℓ2Z3
@@ -383,8 +381,6 @@ lemma tail_finset_convert {x : Seq3D} (F : Finset (ℤ × ℤ × ℤ)) (M : ℝ)
   rw [Finset.sum_map]
   conv_rhs => rw [← Finset.sum_attach]
   rfl
-
-set_option maxHeartbeats 800000
 
 /-- **Main soundness theorem for 3D**: Every mean-zero H¹-bounded sequence
     has an ε-close grid point (constructively proven via rounding).

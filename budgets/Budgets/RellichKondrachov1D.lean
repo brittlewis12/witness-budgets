@@ -301,8 +301,6 @@ theorem H1normSq_meanZero (u : L2_Torus1) (h : u ∈ MeanZeroL2) :
 
 /-! ### PROVEN: Parseval for mean-zero functions -/
 
-set_option maxHeartbeats 400000
-
 /-- Parseval's identity specialized to mean-zero functions.
 **Derivation**: Mathlib's Parseval + tsum splitting + mean-zero ⟹ û(0)=0
 **Budget**: C0-C2 (mathlib Parseval is constructive)

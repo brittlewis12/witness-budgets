@@ -1,298 +1,230 @@
 #!/usr/bin/env python3
 """
-QRK-2D Baseline - Python Reference Implementation
+QRK-2D Performance Baseline — Constructive Witness Extraction
 
-Implements 2D grid parameters from RellichKondrachov2D/Seq.lean
-for compactness witness generation in 2D Fourier coefficient space.
+Implements the same witness-construction pipeline as `tests/QRK2DDemo.lean`:
+  * Exact rational parameters (ε, R, M, δ) with the 2D mesh formula δ = ε/(4·(2M+1))
+  * Explicit Fourier sequences for the three Lean test cases (product, diagonal, mixed)
+  * Factored witness rounding on the non-zero modes only, matching Lean's `roundToGrid2D`
+  * Error-budget verification (inside bound + tail bound ≤ ε²)
 
-Key computations:
-- M_of(ε, R): Same formula as 1D (dimension-free!)
-- mesh2D(ε, M): Conservative mesh for (2M+1)² factor
-- IndexSet2D cardinality: (2M+1)² - 1 (excluding DC mode)
-- Grid explosion analysis
-
-This validates constructive extractability of the 2D compactness proof.
-
-IMPORTANT: We extract the FACTORED witness (M, δ, IndexSet), NOT the full grid!
-The grid size is astronomically large, but the witness parameters are simple.
+Use this script for apples-to-apples benchmarking against the Lean binary `qrk2d_demo`.
 """
 
+from __future__ import annotations
+
 from fractions import Fraction
-from typing import Tuple, List
-import math
+from typing import Dict, Iterable, Tuple
+import time
+
+ComplexFrac = Tuple[Fraction, Fraction]
+ZERO_COMPLEX: ComplexFrac = (Fraction(0), Fraction(0))
+PI_RAT_LB = Fraction(3, 1)
 
 
-# ============================================================================
-# Core Constants
-# ============================================================================
+def ceil_fraction_nonneg(q: Fraction) -> int:
+    if q <= 0:
+        return 0
+    n, d = q.numerator, q.denominator
+    return (n + d - 1) // d
 
-PI_RAT_LB = Fraction(3, 1)  # Conservative π lower bound (same as 1D)
+
+def floor_fraction(q: Fraction) -> int:
+    n, d = q.numerator, q.denominator
+    return n // d
 
 
-# ============================================================================
-# Grid Parameter Computations (2D)
-# ============================================================================
+def complex_sub(a: ComplexFrac, b: ComplexFrac) -> ComplexFrac:
+    return (a[0] - b[0], a[1] - b[1])
 
-def M_of(eps: Fraction, R: Fraction) -> int:
-    """
-    Frequency cutoff M for ε-approximation.
 
-    Formula: M = ⌈R / (π_lb * ε)⌉ + 1
+def complex_sq_abs(z: ComplexFrac) -> Fraction:
+    return z[0] * z[0] + z[1] * z[1]
 
-    DIMENSION-FREE: Same formula as 1D!
-    This controls the tail error from frequencies outside the square [-M,M]².
-    """
+
+class FourierSeq2D:
+    def __init__(self, coeffs: Dict[Tuple[int, int], ComplexFrac]):
+        self.coeffs = coeffs
+
+    def a(self, k: Tuple[int, int]) -> ComplexFrac:
+        return self.coeffs.get(k, ZERO_COMPLEX)
+
+    def support(self) -> Iterable[Tuple[int, int]]:
+        return self.coeffs.keys()
+
+    def is_mean_zero(self) -> bool:
+        return self.a((0, 0)) == ZERO_COMPLEX
+
+
+def m_of(eps: Fraction, R: Fraction) -> int:
     quotient = R / (PI_RAT_LB * eps)
-    return math.ceil(quotient) + 1
+    return ceil_fraction_nonneg(quotient) + 1
 
 
-def mesh2D(eps: Fraction, M: int) -> Fraction:
-    """
-    Grid mesh size δ for coefficient discretization in 2D.
-
-    Formula: δ = ε / (4 * (2*M + 1))
-
-    Factor of 4 instead of 2 accounts for:
-    - (2M+1)² total frequencies (vs 2M in 1D)
-    - Conservative error budget allocation
-    """
+def mesh_2d(eps: Fraction, M: int) -> Fraction:
     return eps / (4 * (2 * M + 1))
 
 
-def index_set_size_2D(M: int) -> int:
-    """
-    Size of 2D frequency index set [-M,M]² \\ {(0,0)}.
-
-    Returns: (2*M + 1)² - 1
-
-    The full square has (2M+1)² points, minus the DC mode (0,0).
-    """
+def index_set_cardinality(M: int) -> int:
     return (2 * M + 1) ** 2 - 1
 
 
-def coeff_bound_2D(R: Fraction, k: Tuple[int, int]) -> Fraction:
-    """
-    Rational bound on coefficient magnitude for frequency k = (k1, k2).
-
-    For k ≠ (0,0): bound = R (conservative bound)
-    For k = (0,0): bound = 0 (mean-zero constraint)
-    """
-    return Fraction(0) if k == (0, 0) else R
-
-
-def coeff_box_radius_2D(bound: Fraction, delta: Fraction) -> int:
-    """
-    Integer radius of coefficient box in complex plane.
-
-    Formula: rad = ⌈bound / δ⌉ + 1
-
-    The box [-rad, rad]² contains all possible discrete
-    coefficient values (real and imaginary parts).
-    """
+def coeff_box_radius(bound: Fraction, delta: Fraction) -> int:
     if bound == 0:
-        return 1  # Minimal box containing (0,0)
-    quotient = bound / delta
-    return math.ceil(quotient) + 1
+        return 1
+    ratio = bound / delta
+    return ceil_fraction_nonneg(ratio) + 1
 
 
-def coeff_box_size_2D(radius: int) -> int:
-    """
-    Number of integer lattice points in [-rad, rad]² (complex coefficient).
-
-    Returns: (2*rad + 1)²
-
-    Each coefficient c_k is discretized to a 2D integer lattice
-    (representing real and imaginary parts).
-    """
-    return (2 * radius + 1) ** 2
+def coeff_bound(R: Fraction, k: Tuple[int, int]) -> Fraction:
+    return Fraction(0) if (k[0] == 0 and k[1] == 0) else R
 
 
-# ============================================================================
-# Grid Analysis
-# ============================================================================
+def round_support(seq: FourierSeq2D, delta: Fraction, R: Fraction) -> Dict[Tuple[int, int], Tuple[int, int]]:
+    rounded: Dict[Tuple[int, int], Tuple[int, int]] = {}
+    for k in seq.support():
+        coeff = seq.a(k)
+        re_scaled = coeff[0] / delta
+        im_scaled = coeff[1] / delta
+        re_int = floor_fraction(re_scaled)
+        im_int = floor_fraction(im_scaled)
+        radius = coeff_box_radius(coeff_bound(R, k), delta)
+        assert abs(re_int) <= radius, f"Real part exceeded box for k={k}"
+        assert abs(im_int) <= radius, f"Imag part exceeded box for k={k}"
+        rounded[k] = (re_int, im_int)
+    return rounded
 
-def analyze_grid_params_2D(eps: Fraction, R: Fraction) -> dict:
-    """
-    Compute all 2D grid parameters for (ε, R) witness package.
 
-    Returns dictionary with:
-    - M: frequency cutoff
-    - delta: mesh size
-    - num_frequencies: |(2M+1)² - 1|
-    - sample_boxes: list of ((k1,k2), radius, size) for sample frequencies
-    - log10_grid_estimate: rough log₁₀(grid_size)
-    """
-    M = M_of(eps, R)
-    delta = mesh2D(eps, M)
-    num_freqs = index_set_size_2D(M)
+def reconstruct(entry: Tuple[int, int], delta: Fraction) -> ComplexFrac:
+    return (Fraction(entry[0]) * delta, Fraction(entry[1]) * delta)
 
-    # Analyze coefficient boxes for sample frequencies
-    # Sample: DC mode, axes modes, diagonal mode, corner modes
-    sample_freqs = [
-        (0, 0),           # DC mode (should be zero)
-        (1, 0),           # Horizontal mode
-        (0, 1),           # Vertical mode
-        (1, 1),           # Diagonal mode
-        (M // 2, 0) if M > 2 else (1, 0),        # Mid-horizontal
-        (M // 2, M // 2) if M > 2 else (1, 1),   # Mid-diagonal
-        (M, 0),           # Max horizontal
-        (0, M),           # Max vertical
-        (M, M),           # Corner mode
+
+def rounding_error(seq: FourierSeq2D, rounded: Dict[Tuple[int, int], Tuple[int, int]], delta: Fraction) -> Fraction:
+    err = Fraction(0)
+    for k, coeff in seq.coeffs.items():
+        approx = reconstruct(rounded[k], delta)
+        diff = complex_sub(coeff, approx)
+        err += complex_sq_abs(diff)
+    return err
+
+
+def tail_energy(seq: FourierSeq2D, M: int) -> Fraction:
+    total = Fraction(0)
+    for k, coeff in seq.coeffs.items():
+        if any(abs(coord) > M for coord in k):
+            total += complex_sq_abs(coeff)
+    return total
+
+
+def tail_error_budget(R: Fraction, M: int) -> Fraction:
+    if M == 0:
+        return Fraction(0)
+    return (R * R) / (4 * (PI_RAT_LB ** 2) * (M ** 2))
+
+
+def inside_error_budget(M: int, delta: Fraction) -> Fraction:
+    count = index_set_cardinality(M)
+    return Fraction(2 * count, 1) * (delta * delta)
+
+
+def format_fraction(q: Fraction, precision: int = 6) -> str:
+    if q.denominator == 1:
+        return str(q.numerator)
+    return f"{float(q):.{precision}g} ({q.numerator}/{q.denominator})"
+
+
+def format_sq_err(q: Fraction) -> str:
+    return f"{float(q):.6e} (exact = {q.numerator}/{q.denominator})"
+
+
+def seq_product_mode() -> FourierSeq2D:
+    return FourierSeq2D({
+        (1, 1): (Fraction(-1, 4), Fraction(0)),
+        (1, -1): (Fraction(1, 4), Fraction(0)),
+        (-1, 1): (Fraction(1, 4), Fraction(0)),
+        (-1, -1): (Fraction(-1, 4), Fraction(0)),
+    })
+
+
+def seq_diagonal() -> FourierSeq2D:
+    return FourierSeq2D({
+        (1, 1): (Fraction(0), Fraction(1, 2)),
+        (-1, -1): (Fraction(0), Fraction(-1, 2)),
+    })
+
+
+def seq_mixed_highfreq() -> FourierSeq2D:
+    return FourierSeq2D({
+        (3, 1): (Fraction(-1, 4), Fraction(0)),
+        (3, -1): (Fraction(1, 4), Fraction(0)),
+        (-3, 1): (Fraction(1, 4), Fraction(0)),
+        (-3, -1): (Fraction(-1, 4), Fraction(0)),
+    })
+
+
+def run_case(name: str, seq_fn, eps: Fraction, R: Fraction) -> None:
+    seq = seq_fn()
+    assert seq.is_mean_zero(), "Lean test sequences are mean-zero"
+
+    M = m_of(eps, R)
+    delta = mesh_2d(eps, M)
+
+    start = time.perf_counter()
+    rounded = round_support(seq, delta, R)
+    elapsed = time.perf_counter() - start
+
+    round_err = rounding_error(seq, rounded, delta)
+    tail_err = tail_energy(seq, M)
+    inside_budget = inside_error_budget(M, delta)
+    tail_budget = tail_error_budget(R, M)
+    total_budget = inside_budget + tail_budget
+    eps_sq = eps * eps
+
+    print(f"╔{'═'*70}╗")
+    print(f"║ {name:<66} ║")
+    print(f"╚{'═'*70}╝")
+    print(f"ε = {eps}  (ε² = {format_sq_err(eps_sq)})")
+    print(f"R = {R}")
+    print(f"M = {M}")
+    print(f"δ = {format_fraction(delta)}")
+    print(f"Index set size = (2M+1)² - 1 = {index_set_cardinality(M):,}")
+    print(f"Active modes rounded = {len(seq.coeffs):,}")
+    print()
+    print("Witness extraction (Python)")
+    print("──────────────────────────")
+    print(f"Time: {elapsed * 1000:.3f} ms")
+    print()
+    print("Error accounting")
+    print("────────────────")
+    print(f"Actual rounding error : {format_sq_err(round_err)}")
+    print(f"Actual tail energy    : {format_sq_err(tail_err)}")
+    print(f"Inside budget ≤       : {format_sq_err(inside_budget)}")
+    print(f"Tail budget ≤         : {format_sq_err(tail_budget)}")
+    print(f"Total budget ≤        : {format_sq_err(total_budget)}")
+    actual_total = round_err + tail_err
+    print(f"Actual total error    : {format_sq_err(actual_total)}")
+    print(f"Budget covers ε²?     : {'YES' if total_budget <= eps_sq else 'NO'}")
+    print(f"Actual error ≤ ε²?    : {'YES' if actual_total <= eps_sq else 'NO'}")
+    print()
+
+
+def main() -> None:
+    print("╔══════════════════════════════════════════════════════════════════════╗")
+    print("║  QRK-2D Python Baseline — Constructive Witness Extraction           ║")
+    print("║  Matches tests/QRK2DDemo.lean (seq₁, seq₂, seq₃)                   ║")
+    print("╚══════════════════════════════════════════════════════════════════════╝")
+    print()
+
+    cases = [
+        ("Test 1: sin(2πx)·sin(2πy)", seq_product_mode, Fraction(1, 10), Fraction(5, 1)),
+        ("Test 2: sin(2π(x+y))", seq_diagonal, Fraction(1, 20), Fraction(7, 1)),
+        ("Test 3: sin(6πx)·sin(2πy)", seq_mixed_highfreq, Fraction(1, 10), Fraction(10, 1)),
     ]
 
-    sample_boxes = []
-    for k in sample_freqs:
-        bound = coeff_bound_2D(R, k)
-        rad = coeff_box_radius_2D(bound, delta)
-        size = coeff_box_size_2D(rad)
-        sample_boxes.append((k, rad, size))
+    for name, builder, eps, R in cases:
+        run_case(name, builder, eps, R)
 
-    # Grid explosion analysis
-    # Full grid is product of all coefficient boxes: Π_{k ∈ IndexSet} Box_k
-    # This is ASTRONOMICALLY large (10^X where X ~ thousands)
-    typical_k = (M // 2, M // 2) if M > 1 else (1, 1)
-    typical_bound = coeff_bound_2D(R, typical_k)
-    typical_rad = coeff_box_radius_2D(typical_bound, delta)
-    typical_box_size = coeff_box_size_2D(typical_rad)
-
-    # Grid size is roughly: (typical_box)^(num_freqs)
-    # Report log₁₀ to avoid overflow
-    if typical_box_size > 1:
-        log10_grid_size = num_freqs * math.log10(typical_box_size)
-    else:
-        log10_grid_size = 0
-
-    return {
-        'eps': eps,
-        'R': R,
-        'M': M,
-        'delta': delta,
-        'num_frequencies': num_freqs,
-        'sample_boxes': sample_boxes,
-        'log10_grid_size': log10_grid_size
-    }
-
-
-# ============================================================================
-# Pretty Printing
-# ============================================================================
-
-def print_grid_analysis_2D(analysis: dict) -> None:
-    """Print 2D grid analysis with box-drawing characters."""
-    eps = analysis['eps']
-    R = analysis['R']
-    M = analysis['M']
-    delta = analysis['delta']
-    num_freqs = analysis['num_frequencies']
-    sample_boxes = analysis['sample_boxes']
-    log10_size = analysis['log10_grid_size']
-
-    print("╔══════════════════════════════════════════════════════════════╗")
-    print(f"║  2D Grid Parameters: ε = {eps}, R = {R:<26} ║")
-    print("╚══════════════════════════════════════════════════════════════╝")
-    print()
-    print(f"Frequency cutoff:     M = {M}")
-    print(f"Frequency square:     [-{M}, {M}]² ∋ (k₁, k₂)")
-    print(f"Index set size:       |IndexSet2D(M)| = {num_freqs} frequencies")
-    print(f"                      = (2M+1)² - 1 = {2*M+1}² - 1")
-    print(f"Grid mesh:            δ = {delta}")
-    print(f"                         ≈ {float(delta):.6e}")
-    print()
-    print("Coefficient Box Analysis (Sample Frequencies)")
-    print("────────────────────────────────────────────────────────────────")
-    print("   (k₁, k₂)   | Bound    | Radius | Box Size [(2r+1)²]")
-    print("──────────────|──────────|────────|───────────────────")
-
-    for k, rad, size in sample_boxes:
-        bound = coeff_bound_2D(R, k)
-        k_str = f"({k[0]:2},{k[1]:2})"
-        print(f" {k_str:12} | {str(bound):8} | {rad:6} | {size:12,}")
-
-    print()
-    print("Grid Explosion Analysis")
-    print("────────────────────────────────────────────────────────────────")
-
-    if log10_size > 0:
-        print(f"Estimated grid cardinality: ~ 10^{log10_size:.1f} points")
-        print()
-        if log10_size > 100:
-            print("⚠ GRID IS ASTRONOMICALLY LARGE ⚠")
-        if log10_size > 1000:
-            print("(More points than atoms in observable universe!)")
-        print()
-        print("BUT: We extract the FACTORED witness (M, δ, IndexSet),")
-        print("     NOT the full grid enumeration!")
-        print()
-        print("Witness complexity:")
-        print(f"  - M: {M} (single integer)")
-        print(f"  - δ: {delta} (single rational)")
-        print(f"  - IndexSet: [-{M},{M}]² \\ {{(0,0)}} (compact description)")
-        print()
-        print("The witness is EXTRACTABLE despite grid explosion!")
-    else:
-        print("Grid cardinality: small (exact count depends on constraints)")
-    print()
-
-
-# ============================================================================
-# Test Suite
-# ============================================================================
-
-def run_test_2D(name: str, eps: Fraction, R: Fraction) -> None:
-    """Run 2D grid analysis for one (ε, R) pair."""
-    print("╔══════════════════════════════════════════════════════════════╗")
-    print(f"║  {name:<58}  ║")
-    print("╚══════════════════════════════════════════════════════════════╝")
-    print()
-
-    analysis = analyze_grid_params_2D(eps, R)
-    print_grid_analysis_2D(analysis)
-    print()
-
-
-def main():
-    """Run all 2D test cases."""
-    print("╔══════════════════════════════════════════════════════════════╗")
-    print("║  Rellich-Kondrachov 2D Baseline (Python)                    ║")
-    print("║  2D Grid Parameter Computations                              ║")
-    print("╚══════════════════════════════════════════════════════════════╝")
-    print()
-    print("Reference: budgets/Budgets/RellichKondrachov2D/Seq.lean")
-    print("Computes witness grid parameters for 2D compactness proof")
-    print()
-    print("Formulas:")
-    print(f"  π_lb = {PI_RAT_LB} (rational lower bound)")
-    print("  M(ε,R) = ⌈R/(π_lb·ε)⌉ + 1        [DIMENSION-FREE!]")
-    print("  δ(ε,M) = ε/(4·(2M+1))            [2D mesh]")
-    print("  IndexSet2D(M) = [-M,M]² \\ {(0,0)}, size = (2M+1)² - 1")
-    print()
-
-    # Test 1: Product mode - separable function
-    run_test_2D(
-        "Test 1: Product sine u(x,y) = sin(2πx)sin(2πy)",
-        Fraction(1, 10),
-        Fraction(1, 1)
-    )
-
-    # Test 2: Diagonal mode - non-separable function
-    run_test_2D(
-        "Test 2: Diagonal mode u(x,y) = sin(2π(x+y))",
-        Fraction(1, 20),
-        Fraction(3, 2)
-    )
-
-    # Test 3: Higher frequency - larger coefficient bounds
-    run_test_2D(
-        "Test 3: Higher frequency modes",
-        Fraction(1, 10),
-        Fraction(2, 1)
-    )
-
-    print("╔══════════════════════════════════════════════════════════════╗")
-    print("║ 2D Baseline Status: SUCCESS                                 ║")
-    print("║ All grid parameters computed with exact rational arithmetic ║")
-    print("║ Witness is EXTRACTABLE despite grid explosion!              ║")
-    print("╚══════════════════════════════════════════════════════════════╝")
+    print("All QRK-2D witness extractions completed successfully.")
 
 
 if __name__ == "__main__":

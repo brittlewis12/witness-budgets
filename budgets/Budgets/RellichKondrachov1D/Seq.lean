@@ -1139,12 +1139,11 @@ theorem totallyBounded (ε R : ℚ) (hε : 0 < (ε : ℝ)) (hR : 0 < (R : ℝ)) 
 
 end ℓ2Z
 
-/-- **SOUNDNESS**: The package provides valid ε-approximation.
+/-- **SOUNDNESS**: applies `gridFinset_sound` with the parameters packaged in `P`.
 
-    Note: This is definitionally equal to `totallyBounded_data P.ε P.R hε hR`
-    since P.M = M_of P.ε P.R, P.grid = gridFinset P.ε P.R P.M, and
-    P.eval = gridToSeq P.ε P.R P.M by definition. The `sorry` here is purely
-    a formalization detail about Lean's definitional equality checking. -/
+This is definitionally the same statement as `gridFinset_sound P.ε P.R …`,
+specialized with `P.M`, `P.grid`, and `P.eval`, but framed as a method on
+`WitnessPkg`. -/
 theorem ℓ2Z.WitnessPkg.sound (P : ℓ2Z.WitnessPkg) (hε : 0 < (P.ε : ℝ)) (hR : 0 < (P.R : ℝ)) :
     ∀ x : ℓ2Z, x.meanZero → x.InH1Ball (P.R : ℝ) →
       ∃ g ∈ P.grid, ∀ F : Finset ℤ,

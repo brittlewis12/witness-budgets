@@ -41,8 +41,6 @@ This file stays in ℓ² space (no measure theory). The sequence space approach 
 
 -/
 
-set_option linter.unusedTactic false
-
 namespace ℓ2Z3
 
 /-! ## Type definitions -/
