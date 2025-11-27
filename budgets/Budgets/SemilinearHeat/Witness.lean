@@ -562,10 +562,10 @@ theorem laplacian_weight_is_witness (k : Lattice spatialDim) (p : ℕ) :
          unfold IntervalDyadic.contains at h_lower h_upper
          have h1 : DyadicCanonical.toRat approx.lower ≤ 314159/100000 := h_lower.1
          have h2 : 31416/10000 ≤ DyadicCanonical.toRat upper_approx.upper := h_upper.2
-         calc DyadicCanonical.toRat approx.lower
+         exact (DyadicCanonical.le_iff_toRat_le _ _).mpr (calc DyadicCanonical.toRat approx.lower
              ≤ 314159/100000 := h1
            _ ≤ 31416/10000 := le_of_lt h_rat
-           _ ≤ DyadicCanonical.toRat upper_approx.upper := h2⟩)
+           _ ≤ DyadicCanonical.toRat upper_approx.upper := h2)⟩)
       (31416/10000) := by
     unfold intervalContains
     constructor
@@ -600,10 +600,10 @@ theorem laplacian_weight_is_witness (k : Lattice spatialDim) (p : ℕ) :
            unfold IntervalDyadic.contains at h_lower h_upper
            have h1 : DyadicCanonical.toRat approx.lower ≤ 314159/100000 := h_lower.1
            have h2 : 31416/10000 ≤ DyadicCanonical.toRat upper_approx.upper := h_upper.2
-           calc DyadicCanonical.toRat approx.lower
+           exact (DyadicCanonical.le_iff_toRat_le _ _).mpr (calc DyadicCanonical.toRat approx.lower
                ≤ 314159/100000 := h1
              _ ≤ 31416/10000 := le_of_lt h_rat
-             _ ≤ DyadicCanonical.toRat upper_approx.upper := h2⟩)
+             _ ≤ DyadicCanonical.toRat upper_approx.upper := h2)⟩)
         (let approx := IntervalDyadic.fromRat (314159/100000) p
          let upper_approx := IntervalDyadic.fromRat (31416/10000) p
          ⟨approx.lower, upper_approx.upper, by
@@ -613,10 +613,10 @@ theorem laplacian_weight_is_witness (k : Lattice spatialDim) (p : ℕ) :
            unfold IntervalDyadic.contains at h_lower h_upper
            have h1 : DyadicCanonical.toRat approx.lower ≤ 314159/100000 := h_lower.1
            have h2 : 31416/10000 ≤ DyadicCanonical.toRat upper_approx.upper := h_upper.2
-           calc DyadicCanonical.toRat approx.lower
+           exact (DyadicCanonical.le_iff_toRat_le _ _).mpr (calc DyadicCanonical.toRat approx.lower
                ≤ 314159/100000 := h1
              _ ≤ 31416/10000 := le_of_lt h_rat
-             _ ≤ DyadicCanonical.toRat upper_approx.upper := h2⟩)
+             _ ≤ DyadicCanonical.toRat upper_approx.upper := h2)⟩)
         p)
       ((31416/10000 : ℚ) * (31416/10000 : ℚ)) := by
     apply mul_preserves_containment

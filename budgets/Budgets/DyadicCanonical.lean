@@ -50,6 +50,36 @@ structure D where
 /-- Conversion to ℚ -/
 def toRat (d : D) : ℚ := d.num / (2^d.exp : ℚ)
 
+/-- Native ordering on dyadics via integer cross-multiplication.
+    This avoids going through ℚ and is fully constructive (C0). -/
+instance : LE D where
+  le a b := a.num * (2^b.exp : ℤ) ≤ b.num * (2^a.exp : ℤ)
+
+instance : LT D where
+  lt a b := (a.num * (2^b.exp : ℤ) < b.num * (2^a.exp : ℤ))
+
+instance : DecidableRel (α := D) (· ≤ ·) := fun a b =>
+  inferInstanceAs (Decidable (a.num * (2^b.exp : ℤ) ≤ b.num * (2^a.exp : ℤ)))
+
+instance : DecidableRel (α := D) (· < ·) := fun a b =>
+  inferInstanceAs (Decidable (a.num * (2^b.exp : ℤ) < b.num * (2^a.exp : ℤ)))
+
+/-- Bridge lemma: native comparison equals rational comparison.
+    Used to connect constructive proofs to Mathlib lemmas when needed. -/
+theorem le_iff_toRat_le (a b : D) : a ≤ b ↔ toRat a ≤ toRat b := by
+  have ha : (0 : ℚ) < 2^a.exp := pow_pos (by norm_num : (0:ℚ) < 2) a.exp
+  have hb : (0 : ℚ) < 2^b.exp := pow_pos (by norm_num : (0:ℚ) < 2) b.exp
+  show a.num * (2^b.exp : ℤ) ≤ b.num * (2^a.exp : ℤ) ↔ toRat a ≤ toRat b
+  rw [toRat, toRat, div_le_div_iff₀ ha hb]
+  constructor <;> intro h <;> exact_mod_cast h
+
+theorem lt_iff_toRat_lt (a b : D) : a < b ↔ toRat a < toRat b := by
+  have ha : (0 : ℚ) < 2^a.exp := pow_pos (by norm_num : (0:ℚ) < 2) a.exp
+  have hb : (0 : ℚ) < 2^b.exp := pow_pos (by norm_num : (0:ℚ) < 2) b.exp
+  show a.num * (2^b.exp : ℤ) < b.num * (2^a.exp : ℤ) ↔ toRat a < toRat b
+  rw [toRat, toRat, div_lt_div_iff₀ ha hb]
+  constructor <;> intro h <;> exact_mod_cast h
+
 /-- Count trailing zeros in binary representation of n -/
 def trailing_zeros : ℕ → ℕ
   | 0 => 0

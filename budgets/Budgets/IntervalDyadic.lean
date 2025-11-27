@@ -32,7 +32,7 @@ open DyadicCanonical RoundedDyadic
 structure IntervalD where
   lower : D
   upper : D
-  valid : toRat lower ≤ toRat upper
+  valid : lower ≤ upper
 
 /-! ## List min/max properties -/
 
@@ -92,13 +92,13 @@ private def dyadicDiv (a b : D) : D :=
 
 /-- Create exact interval (point value) -/
 def exact (d : D) : IntervalD :=
-  ⟨d, d, by simp [toRat]⟩
+  ⟨d, d, by show d.num * (2^d.exp : ℤ) ≤ d.num * (2^d.exp : ℤ); exact le_refl _⟩
 
 /-- Create interval from dyadic with precision rounding -/
 def fromDyadic (d : D) (precision : ℕ) : IntervalD :=
   ⟨floor d precision,
    ceil d precision,
-   floor_le_ceil d precision⟩
+   (le_iff_toRat_le _ _).mpr (floor_le_ceil d precision)⟩
 
 /-- Create interval from rational with precision.
     Explicitly widens the interval to guarantee containment.
@@ -115,7 +115,7 @@ def fromRat (q : ℚ) (precision : ℕ) : IntervalD :=
   let upper_raw := DyadicCanonical.add (ceil d precision) margin
   ⟨floor lower_raw precision,
    ceil upper_raw precision,
-   by
+   (le_iff_toRat_le _ _).mpr (by
      have hfloor_lower := floor_le lower_raw precision
      have hupper_ceil := le_ceil upper_raw precision
      have hd_floor := floor_le d precision
@@ -131,7 +131,7 @@ def fromRat (q : ℚ) (precision : ℕ) : IntervalD :=
        _ ≤ toRat (ceil d precision) := hd_ceil
        _ ≤ toRat (ceil d precision) + toRat margin := by linarith
        _ = toRat upper_raw := (DyadicCanonical.toRat_add _ _).symm
-       _ ≤ toRat (ceil upper_raw precision) := hupper_ceil⟩
+       _ ≤ toRat (ceil upper_raw precision) := hupper_ceil)⟩
 
 /-- Zero interval -/
 def zero : IntervalD := exact DyadicCanonical.zero
@@ -147,15 +147,15 @@ def add (x y : IntervalD) (precision : ℕ) : IntervalD :=
   let upper_raw := DyadicCanonical.add x.upper y.upper
   ⟨floor lower_raw precision,
    ceil upper_raw precision,
-   by
+   (le_iff_toRat_le _ _).mpr (by
      calc toRat (floor lower_raw precision)
          ≤ toRat lower_raw := floor_le lower_raw precision
        _ = toRat (DyadicCanonical.add x.lower y.lower) := by simp [lower_raw]
        _ = toRat x.lower + toRat y.lower := DyadicCanonical.toRat_add x.lower y.lower
-       _ ≤ toRat x.upper + toRat y.upper := add_le_add x.valid y.valid
+       _ ≤ toRat x.upper + toRat y.upper := add_le_add ((le_iff_toRat_le _ _).mp x.valid) ((le_iff_toRat_le _ _).mp y.valid)
        _ = toRat (DyadicCanonical.add x.upper y.upper) := (DyadicCanonical.toRat_add x.upper y.upper).symm
        _ = toRat upper_raw := by simp [upper_raw]
-       _ ≤ toRat (ceil upper_raw precision) := le_ceil upper_raw precision⟩
+       _ ≤ toRat (ceil upper_raw precision) := le_ceil upper_raw precision)⟩
 
 /-- Negation: -[a,b] = [-b, -a] -/
 def neg (x : IntervalD) (precision : ℕ) : IntervalD :=
@@ -163,15 +163,15 @@ def neg (x : IntervalD) (precision : ℕ) : IntervalD :=
   let upper_raw := DyadicCanonical.neg x.lower
   ⟨floor lower_raw precision,
    ceil upper_raw precision,
-   by
+   (le_iff_toRat_le _ _).mpr (by
      calc toRat (floor lower_raw precision)
          ≤ toRat lower_raw := floor_le lower_raw precision
        _ = toRat (DyadicCanonical.neg x.upper) := by simp [lower_raw]
        _ = -(toRat x.upper) := DyadicCanonical.toRat_neg x.upper
-       _ ≤ -(toRat x.lower) := neg_le_neg x.valid
+       _ ≤ -(toRat x.lower) := neg_le_neg ((le_iff_toRat_le _ _).mp x.valid)
        _ = toRat (DyadicCanonical.neg x.lower) := (DyadicCanonical.toRat_neg x.lower).symm
        _ = toRat upper_raw := by simp [upper_raw]
-       _ ≤ toRat (ceil upper_raw precision) := le_ceil upper_raw precision⟩
+       _ ≤ toRat (ceil upper_raw precision) := le_ceil upper_raw precision)⟩
 
 /-- Subtraction: [a,b] - [c,d] = [a-d, b-c] -/
 def sub (x y : IntervalD) (precision : ℕ) : IntervalD :=
@@ -191,18 +191,18 @@ def mul (x y : IntervalD) (precision : ℕ) : IntervalD :=
 
   ⟨floor lower_raw precision,
    ceil upper_raw precision,
-   by
+   (le_iff_toRat_le _ _).mpr (by
      have h_min_le_max := foldl_min_le_foldl_max_four p1 p2 p3 p4
-     exact floor_ceil_preserves_order h_min_le_max⟩
+     exact floor_ceil_preserves_order h_min_le_max)⟩
 
 /-- Division: [a,b] / [c,d] when 0 ∉ [c,d] -/
 def div (x y : IntervalD) (precision : ℕ) : IntervalD :=
   if h : toRat y.lower ≤ 0 ∧ 0 ≤ toRat y.upper then
     ⟨DyadicCanonical.neg (DyadicCanonical.ofNat (2^precision)),
      DyadicCanonical.ofNat (2^precision),
-     by
+     (le_iff_toRat_le _ _).mpr (by
        simp only [DyadicCanonical.toRat_neg]
-       simp [toRat, DyadicCanonical.ofNat, DyadicCanonical.normalize]⟩
+       simp [toRat, DyadicCanonical.ofNat, DyadicCanonical.normalize])⟩
   else
     let q1 := dyadicDiv x.lower y.lower
     let q2 := dyadicDiv x.lower y.upper
@@ -216,9 +216,9 @@ def div (x y : IntervalD) (precision : ℕ) : IntervalD :=
 
     ⟨floor lower_raw precision,
      ceil upper_raw precision,
-     by
+     (le_iff_toRat_le _ _).mpr (by
        have h_min_le_max := foldl_min_le_foldl_max_four q1 q2 q3 q4
-       exact floor_ceil_preserves_order h_min_le_max⟩
+       exact floor_ceil_preserves_order h_min_le_max)⟩
 
 /-! ## Properties and utilities -/
 
@@ -240,25 +240,27 @@ theorem add_contains (x y : IntervalD) (precision : ℕ)
     (hx : contains x (midpoint x)) (hy : contains y (midpoint y)) :
     contains (add x y precision) (midpoint x + midpoint y) := by
   unfold contains midpoint add at *
+  have hx_valid : toRat x.lower ≤ toRat x.upper := (le_iff_toRat_le _ _).mp x.valid
+  have hy_valid : toRat y.lower ≤ toRat y.upper := (le_iff_toRat_le _ _).mp y.valid
   constructor
   · calc toRat (floor (DyadicCanonical.add x.lower y.lower) precision)
         ≤ toRat (DyadicCanonical.add x.lower y.lower) := floor_le _ precision
       _ = toRat x.lower + toRat y.lower := DyadicCanonical.toRat_add _ _
       _ ≤ (toRat x.lower + toRat x.upper) / 2 + (toRat y.lower + toRat y.upper) / 2 := by
           have h1 : toRat x.lower ≤ (toRat x.lower + toRat x.upper) / 2 := by
-            have : 2 * toRat x.lower ≤ toRat x.lower + toRat x.upper := by linarith [x.valid]
+            have : 2 * toRat x.lower ≤ toRat x.lower + toRat x.upper := by linarith [hx_valid]
             linarith
           have h2 : toRat y.lower ≤ (toRat y.lower + toRat y.upper) / 2 := by
-            have : 2 * toRat y.lower ≤ toRat y.lower + toRat y.upper := by linarith [y.valid]
+            have : 2 * toRat y.lower ≤ toRat y.lower + toRat y.upper := by linarith [hy_valid]
             linarith
           exact add_le_add h1 h2
   · calc (toRat x.lower + toRat x.upper) / 2 + (toRat y.lower + toRat y.upper) / 2
         ≤ toRat x.upper + toRat y.upper := by
           have h1 : (toRat x.lower + toRat x.upper) / 2 ≤ toRat x.upper := by
-            have : toRat x.lower + toRat x.upper ≤ 2 * toRat x.upper := by linarith [x.valid]
+            have : toRat x.lower + toRat x.upper ≤ 2 * toRat x.upper := by linarith [hx_valid]
             linarith
           have h2 : (toRat y.lower + toRat y.upper) / 2 ≤ toRat y.upper := by
-            have : toRat y.lower + toRat y.upper ≤ 2 * toRat y.upper := by linarith [y.valid]
+            have : toRat y.lower + toRat y.upper ≤ 2 * toRat y.upper := by linarith [hy_valid]
             linarith
           exact add_le_add h1 h2
       _ = toRat (DyadicCanonical.add x.upper y.upper) := (DyadicCanonical.toRat_add _ _).symm
@@ -573,10 +575,12 @@ theorem mul_contains (x y : IntervalD) (precision : ℕ)
   set p4 := DyadicCanonical.mul x.upper y.upper
   set mx := (toRat x.lower + toRat x.upper) / 2
   set my := (toRat y.lower + toRat y.upper) / 2
-  have hx_mid_lower : toRat x.lower ≤ mx := by simp only [mx]; linarith [x.valid]
-  have hx_mid_upper : mx ≤ toRat x.upper := by simp only [mx]; linarith [x.valid]
-  have hy_mid_lower : toRat y.lower ≤ my := by simp only [my]; linarith [y.valid]
-  have hy_mid_upper : my ≤ toRat y.upper := by simp only [my]; linarith [y.valid]
+  have hx_valid : toRat x.lower ≤ toRat x.upper := (le_iff_toRat_le _ _).mp x.valid
+  have hy_valid : toRat y.lower ≤ toRat y.upper := (le_iff_toRat_le _ _).mp y.valid
+  have hx_mid_lower : toRat x.lower ≤ mx := by simp only [mx]; linarith [hx_valid]
+  have hx_mid_upper : mx ≤ toRat x.upper := by simp only [mx]; linarith [hx_valid]
+  have hy_mid_lower : toRat y.lower ≤ my := by simp only [my]; linarith [hy_valid]
+  have hy_mid_upper : my ≤ toRat y.upper := by simp only [my]; linarith [hy_valid]
   have hbounds := product_in_corner_bounds
     (toRat x.lower) (toRat x.upper) (toRat y.lower) (toRat y.upper) mx my
     hx_mid_lower hx_mid_upper hy_mid_lower hy_mid_upper
@@ -844,8 +848,10 @@ theorem mul_width_bound (x y : IntervalD) (p : ℕ) :
     have hp4 : toRat p4 = toRat x.upper * toRat y.upper := DyadicCanonical.toRat_mul _ _
     have hmax := foldl_max_four_eq p1 p2 p3 p4
     have hmin := foldl_min_four_eq p1 p2 p3 p4
+    have hx_valid : toRat x.lower ≤ toRat x.upper := (le_iff_toRat_le _ _).mp x.valid
+    have hy_valid : toRat y.lower ≤ toRat y.upper := (le_iff_toRat_le _ _).mp y.valid
     rw [hmax, hmin, hp1, hp2, hp3, hp4]
-    exact corner_spread_bound (toRat x.lower) (toRat x.upper) (toRat y.lower) (toRat y.upper) x.valid y.valid
+    exact corner_spread_bound (toRat x.lower) (toRat x.upper) (toRat y.lower) (toRat y.upper) hx_valid hy_valid
   linarith
 
 /-! ## Optimized power operations -/
@@ -864,9 +870,9 @@ def cube (x : IntervalD) (precision : ℕ) : IntervalD :=
 
   ⟨floor lCub precision,
    ceil uCub precision,
-   by
+   (le_iff_toRat_le _ _).mpr (by
      have h_mono : toRat lCub ≤ toRat uCub := by
-       have hv := x.valid
+       have hv := (le_iff_toRat_le _ _).mp x.valid
        simp only [lSq, lCub, uSq, uCub, DyadicCanonical.toRat_mul]
        have hodd : _root_.Odd 3 := ⟨1, by ring⟩
        have mono : StrictMono fun (x : ℚ) => x^3 := _root_.Odd.strictMono_pow hodd
@@ -874,7 +880,7 @@ def cube (x : IntervalD) (precision : ℕ) : IntervalD :=
            = (toRat x.lower)^3 := by ring
          _ ≤ (toRat x.upper)^3 := mono.monotone hv
          _ = toRat x.upper * toRat x.upper * toRat x.upper := by ring
-     exact floor_ceil_preserves_order h_mono⟩
+     exact floor_ceil_preserves_order h_mono)⟩
 
 /-- Square with optimization: [a,b]^2
 
@@ -889,36 +895,36 @@ def square (x : IntervalD) (precision : ℕ) : IntervalD :=
     let maxSq := if toRat lSq > toRat uSq then lSq else uSq
     ⟨DyadicCanonical.zero,
      ceil maxSq precision,
-     by
+     (le_iff_toRat_le _ _).mpr (by
        simp only [DyadicCanonical.zero_toRat]
        have h_sq_nonneg : 0 ≤ toRat maxSq := by
          simp only [maxSq]
          split_ifs
          · simp only [lSq, DyadicCanonical.toRat_mul]; nlinarith [sq_nonneg (toRat x.lower)]
          · simp only [uSq, DyadicCanonical.toRat_mul]; nlinarith [sq_nonneg (toRat x.upper)]
-       exact le_trans h_sq_nonneg (le_ceil maxSq precision)⟩
+       exact le_trans h_sq_nonneg (le_ceil maxSq precision))⟩
   else if hpos : toRat x.lower > 0 then
     ⟨floor lSq precision,
      ceil uSq precision,
-     by
+     (le_iff_toRat_le _ _).mpr (by
        have hlsq : toRat lSq ≤ toRat uSq := by
          simp only [lSq, uSq, DyadicCanonical.toRat_mul]
          have h1 : 0 < toRat x.lower := hpos
-         have h2 : toRat x.lower ≤ toRat x.upper := x.valid
+         have h2 : toRat x.lower ≤ toRat x.upper := (le_iff_toRat_le _ _).mp x.valid
          nlinarith [sq_nonneg (toRat x.lower - toRat x.upper)]
-       exact floor_ceil_preserves_order hlsq⟩
+       exact floor_ceil_preserves_order hlsq)⟩
   else
     ⟨floor uSq precision,
      ceil lSq precision,
-     by
+     (le_iff_toRat_le _ _).mpr (by
        push_neg at h
        have husq : toRat uSq ≤ toRat lSq := by
          simp only [lSq, uSq, DyadicCanonical.toRat_mul]
          have h1 : toRat x.lower ≤ 0 := le_of_not_gt hpos
          have h2 : toRat x.upper < 0 := h h1
-         have h3 : toRat x.lower ≤ toRat x.upper := x.valid
+         have h3 : toRat x.lower ≤ toRat x.upper := (le_iff_toRat_le _ _).mp x.valid
          nlinarith [sq_nonneg (toRat x.lower - toRat x.upper)]
-       exact floor_ceil_preserves_order husq⟩
+       exact floor_ceil_preserves_order husq)⟩
 
 /-! ## Utility functions -/
 
@@ -933,7 +939,7 @@ def abs (x : IntervalD) (precision : ℕ) : IntervalD :=
     let maxAbs := if toRat negLower > toRat x.upper then negLower else x.upper
     ⟨DyadicCanonical.zero,
      ceil maxAbs precision,
-     by
+     (le_iff_toRat_le _ _).mpr (by
        simp only [DyadicCanonical.zero_toRat]
        push_neg at h1 h2
        have h_max_nonneg : 0 ≤ toRat maxAbs := by
@@ -941,7 +947,7 @@ def abs (x : IntervalD) (precision : ℕ) : IntervalD :=
          split_ifs with hcmp
          · simp only [negLower, DyadicCanonical.toRat_neg]; linarith
          · linarith
-       exact le_trans h_max_nonneg (le_ceil maxAbs precision)⟩
+       exact le_trans h_max_nonneg (le_ceil maxAbs precision))⟩
 
 /-- Scale by integer (exact when k is power of 2) -/
 def scaleInt (x : IntervalD) (k : ℤ) (precision : ℕ) : IntervalD :=
@@ -957,11 +963,12 @@ def errorBound (x : IntervalD) : ℚ := width x / 2
 /-- Half: divide by 2 (exact operation for dyadics) -/
 def half (x : IntervalD) : IntervalD :=
   ⟨DyadicCanonical.half x.lower, DyadicCanonical.half x.upper,
-   by
+   (le_iff_toRat_le _ _).mpr (by
      have h1 : toRat (DyadicCanonical.half x.lower) = toRat x.lower / 2 := DyadicCanonical.toRat_half x.lower
      have h2 : toRat (DyadicCanonical.half x.upper) = toRat x.upper / 2 := DyadicCanonical.toRat_half x.upper
      rw [h1, h2]
-     exact div_le_div_of_nonneg_right x.valid (by norm_num : (0 : ℚ) ≤ 2)⟩
+     have hv : toRat x.lower ≤ toRat x.upper := (le_iff_toRat_le _ _).mp x.valid
+     exact div_le_div_of_nonneg_right hv (by norm_num : (0 : ℚ) ≤ 2))⟩
 
 /-- Square root via Newton's method with interval arithmetic
 

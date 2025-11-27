@@ -76,3 +76,22 @@ lean_exe qal_demo where
 lean_exe heat_demo_interval where
   root := `HeatDemoInterval
   srcDir := "tests"
+
+-- FFT extraction demo
+lean_exe fft_demo where
+  root := `FFTDemo
+  srcDir := "tests"
+
+-- Multi-dimensional FFT test
+lean_exe fft_multidim_test where
+  root := `FFTMultiDimTest
+  srcDir := "tests"
+
+-- Spectral ops validation (compare vs direct method)
+lean_exe spectral_validation where
+  root := `SpectralValidation
+  srcDir := "tests"
+
+lean_exe fft_comprehensive_test where
+  root := `FFTComprehensiveTest
+  srcDir := "tests"

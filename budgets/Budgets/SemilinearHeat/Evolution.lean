@@ -494,10 +494,10 @@ def pi_interval (p : ℕ) : IntervalD :=
     have h1 : DyadicCanonical.toRat approx.lower ≤ pi_lower := h_lower.1
     have h2 : pi_upper ≤ DyadicCanonical.toRat upper_approx.upper := h_upper.2
     -- Chain: approx.lower ≤ pi_lower < pi_upper ≤ upper_approx.upper
-    calc DyadicCanonical.toRat approx.lower
+    exact (DyadicCanonical.le_iff_toRat_le _ _).mpr (calc DyadicCanonical.toRat approx.lower
         ≤ pi_lower := h1
       _ ≤ pi_upper := le_of_lt h_rat
-      _ ≤ DyadicCanonical.toRat upper_approx.upper := h2
+      _ ≤ DyadicCanonical.toRat upper_approx.upper := h2)
   ⟩
 
 /-- Laplacian eigenvalue as interval -/
