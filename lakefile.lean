@@ -22,10 +22,12 @@ lean_lib «WBudget» where
 lean_lib «Tests» where
   srcDir := "tests"
 
+@[default_target]
 lean_lib «Budgets» where
   srcDir := "budgets"
 
 -- CLI executable for wbudget analyzer
+@[default_target]
 lean_exe wbudget where
   root := `Main
   srcDir := "scripts"
@@ -63,4 +65,14 @@ lean_exe qrk3d_demo where
 -- Rellich-Kondrachov D (dimension-generic) extraction demo
 lean_exe qrkd_demo where
   root := `QRKDDemo
+  srcDir := "tests"
+
+-- Quantitative Aubin-Lions extraction demo
+lean_exe qal_demo where
+  root := `QALDemo
+  srcDir := "tests"
+
+-- Interval arithmetic semilinear heat 1D PDE demo
+lean_exe heat_demo_interval where
+  root := `HeatDemoInterval
   srcDir := "tests"

@@ -40,41 +40,34 @@ lemma tail_finset_convert {d : ℕ} [NeZero d] {x : SeqD d} (F : Finset (Lattice
   simp only [Function.Embedding.coeFn_mk]
   conv_rhs => rw [← Finset.sum_attach]
 
-/-! ## Main Soundness Theorem -/
+/-! ## Main Soundness Results -/
 
-/-- **Main soundness theorem for dimension d**: Every mean-zero H¹-bounded sequence
-    has an ε-close grid point (constructively proven via rounding).
+/-- **Direct error bound for roundToGridD (non-existential version)**.
 
-    This is the dimension-generic version of gridFinset_sound_1D/2D/3D.
+    This lemma proves that `roundToGridD ε R M x` achieves the required error bound
+    directly, without existential quantification. This is the constructive core of
+    the soundness theorem.
 
-    PROOF STRATEGY (same structure as 1D/2D/3D):
+    PROOF STRATEGY:
     1. Choose M := M_of ε R to control tail error (dimension-free formula)
     2. Define witness g := roundToGridD ε R M x (computable via rounding)
-    3. Split error into tail + inside:
-       - Tail (k ∉ cube [-M,M]ᵈ): ≤ (ε/2)² using dimension-free tail_bound_finitary_d
-       - Inside (k ∈ cube): ≤ (ε/2)² using rounding_bound_mesh_d with meshD formula
+    3. Split error into inside + outside:
+       - Inside (k ∈ IndexSetD d M): ≤ (ε/2)² via rounding_bound_mesh_d
+       - Outside (k ∉ IndexSetD d M): ≤ (ε/2)² via tail_bound_finitary_d
     4. Total: (ε/2)² + (ε/2)² = ε²/2 < ε²
 
-    WITNESS STRUCTURE:
-    - gridToSeqD g is the C0 witness function
-    - GridPointD d is a function type (computable, not enumerated)
-    - The witness comes from roundToGridD (computable function)
-    - No axioms in extraction layer (C0-C2 witness budgets)
-
-    KEY DIMENSION-GENERIC FEATURES:
-    - M_of formula: dimension-free (same as 1D/2D/3D)
-    - Tail bound: dimension-free (elementary spectral estimate)
-    - meshD formula: dimension-parametric ε/(4(2M+1)^⌈d/2⌉)
-    - All lemmas polymorphic over d with [NeZero d] constraint
--/
--- Provide the proof for the axiom declared in Core.lean
-theorem gridFinset_sound_d_proof {d : ℕ} [NeZero d] (ε R : ℚ)
+    This is the key lemma for constructive QAL integration, as it provides
+    a direct witness without Classical.choice. -/
+lemma roundToGridD_sound {d : ℕ} [NeZero d] (ε R : ℚ)
     (hε : 0 < (ε : ℝ)) (hR : 0 < (R : ℝ))
     (x : SeqD d) (hmean : meanZero x) (hH1 : InH1Ball (R : ℝ) x) :
-    ∃ (g : GridPointD d ε R (M_of ε R)),
-      ∀ F : Finset (Lattice d),
-        Finset.sum F (fun k => ‖x.a k - (gridToSeqD ε R (M_of ε R) g).a k‖^2)
-          < (ε : ℝ)^2 := by
+    ∀ F : Finset (Lattice d),
+      Finset.sum F (fun k =>
+        ‖x.a k - (gridToSeqD ε R (M_of ε R) (roundToGridD ε R (M_of ε R) x)).a k‖^2)
+      < (ε : ℝ)^2 := by
+  -- The proof is EXACTLY the same as the body of gridFinset_sound_d_proof
+  -- starting from line 88 (after "let g := roundToGridD")
+
   -- Step 1: Choose M using M_of to control tail error
   set M := M_of ε R with hMdef
 
@@ -86,8 +79,6 @@ theorem gridFinset_sound_d_proof {d : ℕ} [NeZero d] (ε R : ℚ)
 
   -- Step 2: Construct witness via rounding
   let g := roundToGridD ε R M x
-
-  use g
 
   -- Step 3: Prove distance bound for any finite set F
   intro F
@@ -317,5 +308,22 @@ theorem gridFinset_sound_d_proof {d : ℕ} [NeZero d] (ε R : ℚ)
     _ ≤ ((ε : ℝ) / 2)^2 + ((ε : ℝ) / 2)^2 := by linarith [inside_bound, outside_bound]
     _ = (ε : ℝ)^2 / 2 := by ring
     _ < (ε : ℝ)^2 := by linarith [sq_pos_of_pos hε]
+
+/-- **Main soundness theorem for dimension d**: Every mean-zero H¹-bounded sequence
+    has an ε-close grid point (existentially).
+
+    This theorem wraps the constructive `roundToGridD_sound` lemma with an
+    existential quantifier for compatibility with the axiom declared in Core.lean.
+    The witness is explicitly `roundToGridD ε R (M_of ε R) x`. -/
+theorem gridFinset_sound_d_proof {d : ℕ} [NeZero d] (ε R : ℚ)
+    (hε : 0 < (ε : ℝ)) (hR : 0 < (R : ℝ))
+    (x : SeqD d) (hmean : meanZero x) (hH1 : InH1Ball (R : ℝ) x) :
+    ∃ (g : GridPointD d ε R (M_of ε R)),
+      ∀ F : Finset (Lattice d),
+        Finset.sum F (fun k => ‖x.a k - (gridToSeqD ε R (M_of ε R) g).a k‖^2)
+          < (ε : ℝ)^2 := by
+  -- Simplified wrapper using the non-existential lemma
+  use roundToGridD ε R (M_of ε R) x
+  exact roundToGridD_sound ε R hε hR x hmean hH1
 
 end ℓ2ZD

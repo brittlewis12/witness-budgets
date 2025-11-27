@@ -47,10 +47,9 @@ def resultToCSV (r : AnalysisResult) : String :=
   s!"{r.decl},{r.vbudget},{r.xbudget},{r.visitedCount},{r.elapsedMs}"
 
 /-- Run batch analysis -/
-def runBatchAnalysis (args : Args) : IO Unit := do
+def runBatchAnalysis (_args : Args) : IO Unit := do
   -- Initialize Lean environment (use current environment)
-  let opts : Options := {}
-  let inputCtx := Parser.mkInputContext "" "<batch>"
+  -- TODO: wire this into the Lean environment so we can actually run analyses.
 
   -- We need to run this in a proper Lean context
   -- For now, emit error - this needs environment initialization

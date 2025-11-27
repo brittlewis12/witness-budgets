@@ -29,7 +29,7 @@ open ConstructiveQ
 /-! ### Transition Matrix -/
 
 /-- Transition matrix P over ConstructiveQ (exact rational arithmetic) -/
-def P : Fin 3 → Fin 3 → ConstructiveQ :=
+def P : Fin 3 → Fin 3 → Q :=
   fun i j => match i, j with
   | 0, 0 => normalize 1 4
   | 0, 1 => normalize 3 8
@@ -42,34 +42,34 @@ def P : Fin 3 → Fin 3 → ConstructiveQ :=
   | 2, 2 => normalize 1 4
 
 /-- Stationary distribution: uniform over 3 states -/
-def π : Fin 3 → ConstructiveQ :=
+def π : Fin 3 → Q :=
   fun _ => normalize 1 3
 
 /-! ### Matrix Operations -/
 
 /-- Apply transition matrix to distribution: (Pμ)ⱼ = Σᵢ Pⱼᵢ μᵢ -/
-def applyP (μ : Fin 3 → ConstructiveQ) : Fin 3 → ConstructiveQ :=
+def applyP (μ : Fin 3 → Q) : Fin 3 → Q :=
   fun j =>
     P j 0 * μ 0 + P j 1 * μ 1 + P j 2 * μ 2
 
 /-- Iterate transition matrix n times -/
-def iterate (μ₀ : Fin 3 → ConstructiveQ) : ℕ → Fin 3 → ConstructiveQ
+def iterate (μ₀ : Fin 3 → Q) : ℕ → Fin 3 → Q
   | 0 => μ₀
   | n + 1 => applyP (iterate μ₀ n)
 
 /-! ### Distance and Convergence -/
 
 /-- Computable absolute value -/
-def abs_q (x : ConstructiveQ) : ConstructiveQ :=
+def abs_q (x : Q) : Q :=
   if x.num ≥ 0 then x else normalize (-x.num) x.den
 
 /-- L1 distance between distributions -/
-def l1_dist (μ ν : Fin 3 → ConstructiveQ) : ConstructiveQ :=
+def l1_dist (μ ν : Fin 3 → Q) : Q :=
   abs_q (μ 0 - ν 0) + abs_q (μ 1 - ν 1) + abs_q (μ 2 - ν 2)
 
 /-! ### Test Runner -/
 
-def run_convergence_test (name : String) (μ₀ : Fin 3 → ConstructiveQ) (n_steps : List ℕ) : IO Unit := do
+def run_convergence_test (name : String) (μ₀ : Fin 3 → Q) (n_steps : List ℕ) : IO Unit := do
   IO.println s!"╔══════════════════════════════════════════════════╗"
   IO.println s!"║  {name}"
   IO.println s!"╚══════════════════════════════════════════════════╝"

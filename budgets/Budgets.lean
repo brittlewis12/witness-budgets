@@ -17,6 +17,14 @@ import Budgets.QRKConstants
 import Budgets.RellichKondrachov1D
 import Budgets.RellichKondrachov2D
 import Budgets.RellichKondrachov3D
+import Budgets.RellichKondrachovInterval
+import Budgets.AubinLions
+import Budgets.SemilinearHeat1D
+import Budgets.DyadicCanonical
+import Budgets.IntervalComplex
+import Budgets.FFT
+import Budgets.FFTMultiDim
+import Budgets.SpectralOps
 
 namespace SampleModule
 

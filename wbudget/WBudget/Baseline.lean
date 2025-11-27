@@ -60,8 +60,8 @@ def baselineModule (modName : Name) (moduleFile : Option Name := none) : Command
 
       -- Print JSON (with comma separator for array)
       if !first then
-        IO.println ","
-      IO.print result.toJson
+        IO.print ","
+      IO.println result.toJson
       first := false
     catch _ =>
       IO.eprintln s!"Error analyzing {decl}"

@@ -191,21 +191,21 @@ namespace ConstructiveDemo
 
 open ConstructiveQ
 
-def tolerance : ConstructiveQ := (1 : ConstructiveQ) / (1000000 : ConstructiveQ)
+def tolerance : Q := (1 : Q) / (1000000 : Q)
 
-def linear_f : ConstructiveQ → ConstructiveQ := fun x => x / 2 + 1
-def slow_f : ConstructiveQ → ConstructiveQ := fun x => (9 : ConstructiveQ) * x / 10 + 1 / 10
-def fast_f : ConstructiveQ → ConstructiveQ := fun x => x / 10 + 5
-def piecewise_f : ConstructiveQ → ConstructiveQ := fun x => (7 : ConstructiveQ) * x / 10 + 3 / 10
-def rational_f : ConstructiveQ → ConstructiveQ := fun x => (3 : ConstructiveQ) * x / 5 + 2
-def edge_f : ConstructiveQ → ConstructiveQ := fun x => (99 : ConstructiveQ) * x / 100 + 1 / 100
+def linear_f : Q → Q := fun x => x / 2 + 1
+def slow_f : Q → Q := fun x => (9 : Q) * x / 10 + 1 / 10
+def fast_f : Q → Q := fun x => x / 10 + 5
+def piecewise_f : Q → Q := fun x => (7 : Q) * x / 10 + 3 / 10
+def rational_f : Q → Q := fun x => (3 : Q) * x / 5 + 2
+def edge_f : Q → Q := fun x => (99 : Q) * x / 100 + 1 / 100
 
-def abs_q (x : ConstructiveQ) : ConstructiveQ :=
+def abs_q (x : Q) : Q :=
   if x.num ≥ 0 then x else normalize (-x.num) x.den
 
-def run_test (name : String) (f : ConstructiveQ → ConstructiveQ) (x₀ : ConstructiveQ)
+def run_test (name : String) (f : Q → Q) (x₀ : Q)
     (n_iters : ℕ) : IO Unit := do
-  let rec iterate (x : ConstructiveQ) : ℕ → ConstructiveQ
+  let rec iterate (x : Q) : ℕ → Q
     | 0 => x
     | n + 1 => f (iterate x n)
   let x_n := iterate x₀ n_iters

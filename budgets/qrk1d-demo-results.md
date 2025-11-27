@@ -329,7 +329,7 @@ Each test sequence comes with constructively proven properties:
 2. **H¹-ball membership**: `seq.InH1Ball R` proven via:
    - Finite support observation (only finitely many k contribute)
    - Explicit energy calculation (sum over support)
-   - Arithmetic verification (`norm_num` + `sorry` placeholders for π bounds)
+   - Arithmetic verification (`norm_num` + π bounds)
 3. **Witness existence**: `witness_exists_testN` proven by applying `gridFinset_sound`
 
 #### Advantages Over Axiomatization

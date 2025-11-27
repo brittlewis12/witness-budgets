@@ -27,10 +27,10 @@ open ConstructiveQ
 /-! ### Target and tolerance -/
 
 /-- Convergence tolerance for runtime validation -/
-def tolerance : ConstructiveQ := (1 : ConstructiveQ) / (100 : ConstructiveQ)
+def tolerance : Q := (1 : Q) / (100 : Q)
 
 /-- Known value of √2 for comparison (3 decimal places) -/
-def sqrt2_approx : ConstructiveQ := normalize 1414 1000
+def sqrt2_approx : Q := normalize 1414 1000
 
 /-! ### Newton map for √2 -/
 
@@ -39,27 +39,27 @@ def sqrt2_approx : ConstructiveQ := normalize 1414 1000
     Derived from f(x) = x² - 2 via Newton–Raphson:
     N(x) = x - f(x)/f'(x) = x - (x² - 2)/(2x) = x/2 + 1/x
 -/
-def newton_map : ConstructiveQ → ConstructiveQ :=
+def newton_map : Q → Q :=
   fun x => x / 2 + 1 / x
 
 /-- Function whose root we seek: f(x) = x² - 2 -/
-def f : ConstructiveQ → ConstructiveQ :=
+def f : Q → Q :=
   fun x => x * x - 2
 
 /-! ### Helper functions -/
 
 /-- Computable absolute value for convergence checking -/
-def abs_q (x : ConstructiveQ) : ConstructiveQ :=
+def abs_q (x : Q) : Q :=
   if x.num ≥ 0 then x else normalize (-x.num) x.den
 
 /-- Iterate a function n times -/
-def iterate (f : ConstructiveQ → ConstructiveQ) (x₀ : ConstructiveQ) : ℕ → ConstructiveQ
+def iterate (f : Q → Q) (x₀ : Q) : ℕ → Q
   | 0 => x₀
   | n + 1 => f (iterate f x₀ n)
 
 /-! ### Test runner -/
 
-def run_newton_test (name : String) (x₀ : ConstructiveQ) (n_iters : ℕ) : IO Unit := do
+def run_newton_test (name : String) (x₀ : Q) (n_iters : ℕ) : IO Unit := do
   IO.println s!"=== {name} ==="
   IO.println s!"Starting point: {x₀}"
   IO.println s!"Target: √2 ≈ {sqrt2_approx}"
@@ -86,7 +86,7 @@ def run_newton_test (name : String) (x₀ : ConstructiveQ) (n_iters : ℕ) : IO 
 /-! ### Convergence analysis -/
 
 /-- Show iteration trajectory for analysis -/
-def show_trajectory (x₀ : ConstructiveQ) (n_steps : ℕ) : IO Unit := do
+def show_trajectory (x₀ : Q) (n_steps : ℕ) : IO Unit := do
   IO.println "=== Convergence Trajectory ==="
   IO.println s!"Starting from x₀ = {x₀}"
   IO.println ""

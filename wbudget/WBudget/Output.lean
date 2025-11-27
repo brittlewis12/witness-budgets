@@ -56,12 +56,16 @@ where
 /-- Convert analysis result to JSON -/
 def AnalysisResult.toJson (r : AnalysisResult) : String :=
   let triggersJson := "[" ++ String.intercalate "," (r.triggers.toList.map Trigger.toJson) ++ "]"
+  let typeFlowJson := "[" ++ String.intercalate "," (r.typeFlowTriggers.toList.map Trigger.toJson) ++ "]"
+  let propOnlyJson := "[" ++ String.intercalate "," (r.propOnlyTriggers.toList.map Trigger.toJson) ++ "]"
   let warningsJson := "[" ++ String.intercalate "," (r.lintWarnings.toList.map LintWarning.toJson) ++ "]"
   s!"\{
   \"decl\": \"{r.decl}\",
   \"vbudget\": \"{r.vbudget}\",
   \"xbudget\": \"{r.xbudget}\",
   \"triggers\": {triggersJson},
+  \"type_flow_triggers\": {typeFlowJson},
+  \"prop_only_triggers\": {propOnlyJson},
   \"visited_count\": {r.visitedCount},
   \"fuel_exhausted\": {if r.fuelExhausted then "true" else "false"},
   \"elapsed_ms\": {r.elapsedMs},
